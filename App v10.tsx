@@ -1197,6 +1197,7 @@ function CasesScreen({ cases, onOpen, onAdd, deleteCase }) {
   );
 }
 
+// ✨ 多餘的 return ( 已被刪除，order2 現在是乾淨的獨立函式
 function order2(s){return{red:0,yellow:1,green:2,faint:3}[s];}
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1245,6 +1246,7 @@ function DetailScreen({ case_:c, methods, onBack, updateCase, showToast }) {
           <div className="det-cval">{c.lastContact?.slice(5)||'—'}</div>
         </div>
         <div className="det-cell">
+          <div className="det-cell">
           <div className="det-clabel">下次聯絡</div>
           <div className="det-cval" style={{color:urgColor}}>{c.nextContact?.slice(5)||'—'}</div>
         </div>
@@ -1309,7 +1311,7 @@ function DetailScreen({ case_:c, methods, onBack, updateCase, showToast }) {
 
 const MONTH_NAMES = ["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"];
 const DOW = ["日","一","二","三","四","五","六"];
-
+      
 function CalendarScreen({ cases, onOpen }) {
   const todayParts = TODAY.split("-").map(Number); // [2026,5,23]
   const [year,  setYear]  = useState(todayParts[0]);
