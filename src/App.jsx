@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DESIGN TOKENS  — cleaner, tool-feel palette
@@ -1059,6 +1059,7 @@ function HomeScreen({ cases, methods, onOpen, updateCase, showToast }) {
     <div className="screen-pad">
       <div className="ph">
         <div>
+          <div style={{fontSize:11,fontWeight:700,letterSpacing:".08em",color:"var(--accent)",marginBottom:2}}>ReCon｜再聯絡</div>
           <div className="ph-title">今日待聯絡</div>
           <div className="ph-sub">{TODAY_DISPLAY}</div>
         </div>
@@ -1114,7 +1115,18 @@ function HomeScreen({ cases, methods, onOpen, updateCase, showToast }) {
 // CASES SCREEN — flat list
 // ─────────────────────────────────────────────────────────────────────────────
 
-function CasesScreen({ cases, onOpen, onAdd }) {
+function CasesScreen({ cases, onOpen, onAdd, deleteCase }) {
+  const SORT_OPTIONS=[{key:"status",label:"狀態"},{key:"nick",label:"名稱"},{key:"next",label:"到期"},{key:"level",label:"等級"}];
+  const [sortBy,setSortBy]=useState("status");
+  const [confirmDel,setConfirmDel]=useState(null);
+  function sortedCases(){
+    const arr=[...cases];
+    if(sortBy==="status") return arr.sort((a,b)=>order2(getStatus(a))-order2(getStatus(b)));
+    if(sortBy==="nick")   return arr.sort((a,b)=>a.nick.localeCompare(b.nick,"zh-TW"));
+    if(sortBy==="next")   return arr.sort((a,b)=>new Date(a.nextContact)-new Date(b.nextContact));
+    if(sortBy==="level")  return arr.sort((a,b)=>a.level.localeCompare(b.level));
+    return arr;
+  }
   return (
     <div className="screen-pad" style={{position:"relative"}}>
       <div className="ph">
@@ -1124,15 +1136,24 @@ function CasesScreen({ cases, onOpen, onAdd }) {
         </div>
         <button className="ph-action" onClick={onAdd}>＋ 新增</button>
       </div>
-
+      <div style={{display:"flex",gap:6,padding:"10px 16px 4px",overflowX:"auto"}}>
+        {SORT_OPTIONS.map(s=>(
+          <button key={s.key} onClick={()=>setSortBy(s.key)} style={{
+            flexShrink:0,padding:"5px 12px",borderRadius:20,border:"1px solid",
+            fontSize:12,fontWeight:500,fontFamily:"var(--sans)",cursor:"pointer",
+            background:sortBy===s.key?"var(--accent)":"var(--surface)",
+            borderColor:sortBy===s.key?"var(--accent)":"var(--border)",
+            color:sortBy===s.key?"#fff":"var(--muted)",
+          }}>{s.label}</button>
+        ))}
+      </div>
       {cases.length===0 && <div className="empty">尚無個案<br/>點右上角新增</div>}
-
-      {[...cases]
-        .sort((a,b)=>order2(getStatus(a))-order2(getStatus(b)))
-        .map(c=>{
-          const diff = daysBetween(TODAY,c.nextContact);
-          return (
-            <div className="list-row" key={c.id} onClick={()=>onOpen(c.id)}>
+      {sortedCases().map(c=>{
+        const diff=daysBetween(TODAY,c.nextContact);
+        const isPendingDel=confirmDel===c.id;
+        return (
+          <div key={c.id}>
+            <div className="list-row" onClick={()=>{ if(!isPendingDel) onOpen(c.id); }}>
               <Sq status={getStatus(c)}/>
               <div className="row-main">
                 <span className="row-nick">{c.nick}</span>
@@ -1141,19 +1162,41 @@ function CasesScreen({ cases, onOpen, onAdd }) {
               </div>
               <span className="row-date">
                 {c.scheduled
-                  ? `${c.scheduled?.date?.slice(5)||''} ${c.scheduled?.type||''}`
-                  : diff<0 ? `逾期 ${Math.abs(diff)}天`
-                  : diff===0 ? "今日"
-                  : `${diff}天後`}
+                  ? `${c.scheduled?.date?.slice(5)||""} ${c.scheduled?.type||""}`
+                  : diff<0?`逾期 ${Math.abs(diff)}天`:diff===0?"今日":`${diff}天後`}
               </span>
-              <span style={{color:"var(--muted)",fontSize:16}}>›</span>
+              <button onClick={e=>{e.stopPropagation();setConfirmDel(isPendingDel?null:c.id);}}
+                style={{marginLeft:4,width:28,height:28,borderRadius:"50%",
+                  border:"1px solid var(--border)",background:"var(--surface2)",
+                  fontSize:14,color:"var(--muted)",cursor:"pointer",
+                  display:"flex",alignItems:"center",justifyContent:"center",
+                  fontFamily:"var(--sans)",flexShrink:0,letterSpacing:1}}>
+                ···
+              </button>
             </div>
-          );
-        })
-      }
+            {isPendingDel && (
+              <div style={{margin:"0 16px 6px",padding:"10px 14px",
+                background:"var(--red-bg)",border:"1px solid var(--red-border)",
+                borderRadius:"0 0 var(--r-md) var(--r-md)",
+                display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+                <span style={{fontSize:12,color:"var(--red)",fontWeight:500,flex:1}}>
+                  確認刪除「{c.nick}」？此操作無法復原
+                </span>
+                <div style={{display:"flex",gap:6,flexShrink:0}}>
+                  <button className="act-btn" style={{padding:"5px 10px",fontSize:12}}
+                    onClick={()=>setConfirmDel(null)}>取消</button>
+                  <button className="act-btn danger" style={{padding:"5px 10px",fontSize:12}}
+                    onClick={()=>{deleteCase(c.id);setConfirmDel(null);}}>刪除</button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
+  return (
 function order2(s){return{red:0,yellow:1,green:2,faint:3}[s];}
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1669,7 +1712,7 @@ function SettingsScreen({ methods, setMethods, levels, setLevels }) {
         </div>
         <div className="set-row">
           <span className="set-label">版本</span>
-          <span className="set-val">v9.0</span>
+          <span className="set-val">v10.0</span>
         </div>
       </div>
     </div>
@@ -1688,15 +1731,36 @@ const INITIAL_LEVELS = {
   E: { label: "緊急",  days: 7,  desc: "每週",       colorKey: "red"    },
 };
 
+// ── localStorage helpers ──────────────────────────────────────────
+const LS = { cases:"rc_cases", methods:"rc_methods", levels:"rc_levels" };
+function lsGet(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    const p = JSON.parse(raw);
+    if (key===LS.cases   && !Array.isArray(p)) return fallback;
+    if (key===LS.methods && !Array.isArray(p)) return fallback;
+    if (key===LS.levels  && (typeof p!=="object"||Array.isArray(p))) return fallback;
+    return p;
+  } catch { return fallback; }
+}
+function lsSet(key, val) {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+}
+
 export default function App() {
-  const [cases,    setCases]    = useState(INITIAL_CASES);
-  const [methods,  setMethods]  = useState(INITIAL_METHODS);
-  const [levels,   setLevels]   = useState(INITIAL_LEVELS);
+  const [cases,    setCases]    = useState(()=>lsGet(LS.cases,   INITIAL_CASES));
+  const [methods,  setMethods]  = useState(()=>lsGet(LS.methods, INITIAL_METHODS));
+  const [levels,   setLevels]   = useState(()=>lsGet(LS.levels,  INITIAL_LEVELS));
   const [tab,      setTab]      = useState("home");
   const [detailId, setDetailId] = useState(null);
   const [toast,    setToast]    = useState(null);
   const [addOpen,  setAddOpen]  = useState(false);
   const toastTimer = useRef(null);
+  useEffect(()=>{ lsSet(LS.cases,   cases);   }, [cases]);
+  useEffect(()=>{ lsSet(LS.methods, methods); }, [methods]);
+  useEffect(()=>{ lsSet(LS.levels,  levels);  }, [levels]);
+  useEffect(()=>{ document.title="ReCon｜再聯絡"; }, []);
 
   function updateCase(id, patchFn) {
     setCases(prev => prev.map(c => {
@@ -1721,6 +1785,11 @@ export default function App() {
   function addCase(nc) {
     setCases(prev=>[...prev,nc]);
     showToast(`已新增 ${nc.nick}`);
+  }
+  function deleteCase(id) {
+    setCases(prev=>prev.filter(c=>c.id!==id));
+    showToast("已刪除個案");
+    if (detailId===id) { setDetailId(null); setTab("cases"); }
   }
   function showToast(msg) {
     setToast(msg);
@@ -1750,7 +1819,7 @@ export default function App() {
                 updateCase={updateCase} showToast={showToast}/>
             )}
             {tab==="cases" && (
-              <CasesScreen cases={cases} onOpen={openCase} onAdd={()=>setAddOpen(true)}/>
+              <CasesScreen cases={cases} onOpen={openCase} onAdd={()=>setAddOpen(true)} deleteCase={deleteCase}/>
             )}
             {tab==="detail" && detailCase && (
               <DetailScreen case_={detailCase} methods={methods} onBack={closeDetail}
