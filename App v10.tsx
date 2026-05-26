@@ -1205,7 +1205,7 @@ function order2(s){return{red:0,yellow:1,green:2,faint:3}[s];}
 // CASE DETAIL SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
 
-function DetailScreen({ case_:c, methods, onBack, updateCase, showToast }) {
+function DetailScreen({ case_:c, methods, onBack, updateCase, showToast }) 
   const [logModal,setLogModal]         = useState(false);
   const [schedModal,setSchedModal]     = useState(false);
 
