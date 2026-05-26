@@ -1196,7 +1196,7 @@ function CasesScreen({ cases, onOpen, onAdd, deleteCase }) {
     </div>
   );
 }
-  return (
+
 function order2(s){return{red:0,yellow:1,green:2,faint:3}[s];}
 
 // ─────────────────────────────────────────────────────────────────────────────
