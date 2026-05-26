@@ -1115,7 +1115,7 @@ function HomeScreen({ cases, methods, onOpen, updateCase, showToast }) {
 // CASES SCREEN — flat list
 // ─────────────────────────────────────────────────────────────────────────────
 
-/*function CasesScreen({ cases, onOpen, onAdd, deleteCase }) {
+function CasesScreen({ cases, onOpen, onAdd, deleteCase }) {
   const SORT_OPTIONS=[{key:"status",label:"狀態"},{key:"nick",label:"名稱"},{key:"next",label:"到期"},{key:"level",label:"等級"}];
   const [sortBy,setSortBy]=useState("status");
   const [confirmDel,setConfirmDel]=useState(null);
@@ -1196,16 +1196,18 @@ function HomeScreen({ cases, methods, onOpen, updateCase, showToast }) {
     </div>
   );
 }
-*/
+
 
 // ✨ 多餘的 return ( 已被刪除，order2 現在是乾淨的獨立函式
 function order2(s){return{red:0,yellow:1,green:2,faint:3}[s];}
+
+); } } 
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CASE DETAIL SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
 
-function DetailScreen({ case_:c, methods, onBack, updateCase, showToast }) 
+function DetailScreen({ case_:c, methods, onBack, updateCase, showToast }) {
   const [logModal,setLogModal]         = useState(false);
   const [schedModal,setSchedModal]     = useState(false);
 
