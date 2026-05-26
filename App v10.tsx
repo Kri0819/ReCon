@@ -1119,6 +1119,7 @@ function CasesScreen({ cases, onOpen, onAdd, deleteCase }) {
   const SORT_OPTIONS=[{key:"status",label:"狀態"},{key:"nick",label:"名稱"},{key:"next",label:"到期"},{key:"level",label:"等級"}];
   const [sortBy,setSortBy]=useState("status");
   const [confirmDel,setConfirmDel]=useState(null);
+  
   function sortedCases(){
     const arr=[...cases];
     if(sortBy==="status") return arr.sort((a,b)=>order2(getStatus(a))-order2(getStatus(b)));
@@ -1127,6 +1128,7 @@ function CasesScreen({ cases, onOpen, onAdd, deleteCase }) {
     if(sortBy==="level")  return arr.sort((a,b)=>a.level.localeCompare(b.level));
     return arr;
   }
+
   return (
     <div className="screen-pad" style={{position:"relative"}}>
       <div className="ph">
@@ -1197,11 +1199,7 @@ function CasesScreen({ cases, onOpen, onAdd, deleteCase }) {
   );
 }
 
-
-// ✨ 多餘的 return ( 已被刪除，order2 現在是乾淨的獨立函式
 function order2(s){return{red:0,yellow:1,green:2,faint:3}[s];}
-
-); } } 
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CASE DETAIL SCREEN
@@ -1224,10 +1222,12 @@ function DetailScreen({ case_:c, methods, onBack, updateCase, showToast }) {
     }));
     showToast("已記錄");
   }
+  
   function handleSchedSave(id,sched){
     updateCase(id,()=>({scheduled:sched}));
     showToast(`已排定 ${sched.type} · ${sched.date.slice(5)}`);
   }
+  
   function cancelSched(){
     updateCase(c.id,()=>({scheduled:null}));
     showToast("已取消排程");
@@ -1249,7 +1249,6 @@ function DetailScreen({ case_:c, methods, onBack, updateCase, showToast }) {
           <div className="det-cval">{c.lastContact?.slice(5)||'—'}</div>
         </div>
         <div className="det-cell">
-          <div className="det-cell">
           <div className="det-clabel">下次聯絡</div>
           <div className="det-cval" style={{color:urgColor}}>{c.nextContact?.slice(5)||'—'}</div>
         </div>
@@ -1275,8 +1274,7 @@ function DetailScreen({ case_:c, methods, onBack, updateCase, showToast }) {
                 {c.scheduled.date} {c.scheduled.time} · {c.scheduled.type}
                 {c.scheduled.note ? ` · ${c.scheduled.note}` : ""}
               </div>
-              <button className="act-btn danger" style={{fontSize:11}}
-                onClick={cancelSched}>取消</button>
+              <button className="act-btn danger" style={{fontSize:11}} onClick={cancelSched}>取消</button>
             </div>
           </div>
         )}
