@@ -1091,7 +1091,7 @@ function HomeScreen({ cases, methods, onOpen, updateCase, showToast }) {
                 </div>
               </div>
             ))}
-          </div>
+          </div> /* 💡 修正點：原本這裡漏掉了解析 map 迴圈外層的 </div> */
         );
       })}
 
