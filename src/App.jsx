@@ -1421,7 +1421,7 @@ function CalendarScreen({ cases, onOpen }) {
     </div>
   );
 }
-
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SETTINGS — v5: hub → sub-page navigation
