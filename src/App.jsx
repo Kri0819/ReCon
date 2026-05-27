@@ -1220,31 +1220,34 @@ function order2(s){return{red:0,yellow:1,green:2,faint:3}[s];}
 // CASE DETAIL SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
 
-function DetailScreen({ case_:c, methods, levels: levelsMap, onBack, updateCase, showToast }) {
-  const [logModal,setLogModal]         = useState(false);
-  const [schedModal,setSchedModal]     = useState(false);
+const DetailScreen = ({ case_: c, methods, levels: levelsMap, onBack, updateCase, showToast }) => {
+  const [logModal, setLogModal] = useState(false);
+  const [schedModal, setSchedModal] = useState(false);
 
-  const diff = daysBetween(TODAY,c.nextContact);
-  const urgColor = diff<0?"var(--red)":diff<=1?"var(--yellow)":"var(--green)";
-  const urgLabel = diff<0?`逾期 ${Math.abs(diff)} 天`:diff===0?"今日到期":diff===1?"明日到期":`${diff} 天後`;
+  const diff = daysBetween(TODAY, c.nextContact);
+  const urgColor = diff < 0 ? "var(--red)" : diff <= 1 ? "var(--yellow)" : "var(--green)";
+  const urgLabel = diff < 0 ? `逾期 ${Math.abs(diff)} 天` : diff === 0 ? "今日到期" : diff === 1 ? "明日到期" : `${diff} 天後`;
 
-  function handleLogSave(id,method,note){
-    updateCase(id,prev=>({
-      lastContact:TODAY,
-      nextContact:calcNext(prev.level,TODAY,levelsMap),
-      scheduled:null,
-      logs:[{date:TODAY,method,note:note||"已聯絡"},...prev.logs],
+  const handleLogSave = (id, method, note) => {
+    updateCase(id, prev => ({
+      ...prev,
+      lastContact: TODAY,
+      nextContact: calcNext(c.level, TODAY, levelsMap),
+      scheduled: null,
+      logs: [{ date: TODAY, method, note: note || "已聯絡" }, ...prev.logs]
     }));
     showToast("已記錄");
-  }
-  function handleSchedSave(id,sched){
-    updateCase(id,()=>({scheduled:sched}));
+  };
+
+  const handleSchedSave = (id, sched) => {
+    updateCase(id, prev => ({ ...prev, scheduled: sched }));
     showToast(`已排定 ${sched.type} · ${sched.date.slice(5)}`);
-  }
-  function cancelSched(){
-    updateCase(c.id,()=>({scheduled:null}));
+  };
+
+  const cancelSched = () => {
+    updateCase(c.id, prev => ({ ...prev, scheduled: null }));
     showToast("已取消排程");
-  }
+  };
 
   return (
     <div className="screen-pad">
@@ -1259,51 +1262,51 @@ function DetailScreen({ case_:c, methods, levels: levelsMap, onBack, updateCase,
       <div className="det-meta">
         <div className="det-cell">
           <div className="det-clabel">上次聯絡</div>
-          <div className="det-cval">{c.lastContact?.slice(5)||'—'}</div>
+          <div className="det-cval">{c.lastContact?.slice(5) || '—'}</div>
         </div>
         <div className="det-cell">
           <div className="det-clabel">下次聯絡</div>
-          <div className="det-cval" style={{color:urgColor}}>{c.nextContact?.slice(5)||'—'}</div>
+          <div className="det-cval" style={{ color: urgColor }}>{c.nextContact?.slice(5) || '—'}</div>
         </div>
         <div className="det-cell">
           <div className="det-clabel">狀態</div>
-          <div className="det-cval" style={{color:urgColor}}>{urgLabel}</div>
+          <div className="det-cval" style={{ color: urgColor }}>{urgLabel}</div>
         </div>
         <div className="det-cell">
           <div className="det-clabel">等級規則</div>
-          <div className="det-cval">{LEVELS[c.level]?.desc}</div>
+          <div className="det-cval">{levelsMap[c.level]?.desc}</div>
         </div>
         {c.note && (
           <div className="det-cell full">
             <div className="det-clabel">備註</div>
-            <div className="det-cval" style={{fontWeight:400,fontSize:13}}>{c.note}</div>
+            <div className="det-cval" style={{ fontWeight: 400, fontSize: 13 }}>{c.note}</div>
           </div>
         )}
         {c.scheduled && (
-          <div className="det-cell full" style={{background:"var(--green-bg)"}}>
-            <div className="det-clabel" style={{color:"var(--green)"}}>已排定</div>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-              <div className="det-cval" style={{color:"var(--green)",fontWeight:400,fontSize:13}}>
+          <div className="det-cell full" style={{ background: "var(--green-bg)" }}>
+            <div className="det-clabel" style={{ color: "var(--green)" }}>已排定</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div className="det-cval" style={{ color: "var(--green)", fontWeight: 400, fontSize: 13 }}>
                 {c.scheduled.date} {c.scheduled.time} · {c.scheduled.type}
                 {c.scheduled.note ? ` · ${c.scheduled.note}` : ""}
               </div>
-              <button className="act-btn danger" style={{fontSize:11}}
-                onClick={cancelSched}>取消</button>
+              <button className="act-btn danger" style={{ fontSize: 11 }}
+                onClick={() => cancelSched()}>取消</button>
             </div>
           </div>
         )}
       </div>
 
       <div className="det-actions">
-        <button className="act-btn primary" onClick={()=>setLogModal(true)}>記錄聯絡</button>
-        <button className="act-btn" onClick={()=>setSchedModal(true)} disabled={!!c.scheduled}>
-          {c.scheduled?"已排定":"排定聯絡"}
+        <button className="act-btn primary" onClick={() => setLogModal(true)}>記錄聯絡</button>
+        <button className="act-btn" onClick={() => setSchedModal(true)} disabled={!!c.scheduled}>
+          {c.scheduled ? "已排定" : "排定聯絡"}
         </button>
       </div>
 
       <div className="sec-label">聯絡紀錄</div>
-      {c.logs.length===0 && <div className="empty" style={{padding:"20px 24px"}}>尚無紀錄</div>}
-      {c.logs.map((log,i)=>(
+      {c.logs.length === 0 && <div className="empty" style={{ padding: "20px 24px" }}>尚無紀錄</div>}
+      {c.logs.map((log, i) => (
         <div className="log-item" key={i}>
           <div className="log-bar"/>
           <div className="log-body">
@@ -1314,12 +1317,13 @@ function DetailScreen({ case_:c, methods, levels: levelsMap, onBack, updateCase,
         </div>
       ))}
 
-      {logModal && <LogModal case_={c} methods={methods} onClose={()=>setLogModal(false)} onSave={handleLogSave}/>}
-      {schedModal && <ScheduleModal case_={c} methods={methods} onClose={()=>setSchedModal(false)} onSave={handleSchedSave}/>}
+      {logModal && <LogModal case_={c} methods={methods} onClose={() => setLogModal(false)} onSave={handleLogSave}/>}
+      {schedModal && <ScheduleModal case_={c} methods={methods} onClose={() => setSchedModal(false)} onSave={handleSchedSave}/>}
     </div>
   );
-}
-}
+};
+
+export default DetailScreen;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CALENDAR SCREEN — monthly grid
