@@ -1319,6 +1319,7 @@ function DetailScreen({ case_:c, methods, levels: levelsMap, onBack, updateCase,
     </div>
   );
 }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CALENDAR SCREEN — monthly grid
@@ -1421,7 +1422,7 @@ function CalendarScreen({ cases, onOpen }) {
     </div>
   );
 }
-}
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SETTINGS — v5: hub → sub-page navigation
