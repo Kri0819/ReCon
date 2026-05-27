@@ -56,7 +56,7 @@ const css = `
 }
 
 body {
-  background: #E8E8E4;
+  background: var(--bg);
   font-family: var(--sans);
   font-size: 14px;
   line-height: 1.5;
@@ -67,11 +67,9 @@ body {
 
 /* ── Phone shell ── */
 .shell {
-  width: 390px;
-  height: 844px;
+  width: 100%;
+  min-height: 100dvh;
   background: var(--bg);
-  border-radius: 48px;
-  box-shadow: 0 48px 96px rgba(0,0,0,.24), 0 0 0 1px rgba(0,0,0,.08);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -88,7 +86,7 @@ body {
   display: flex;
   background: var(--surface);
   border-top: 1px solid var(--border);
-  padding: 10px 0 24px;
+  padding: 10px 0 calc(env(safe-area-inset-bottom, 0px) + 16px);
   flex-shrink: 0;
 }
 .bnav-btn {
@@ -111,7 +109,7 @@ body {
 
 /* ── Page header ── */
 .ph {
-  padding: 20px 20px 14px;
+  padding: calc(env(safe-area-inset-top, 0px) + 20px) 20px 14px;
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
@@ -746,6 +744,27 @@ const INITIAL_CASES = [
   },
 ];
 
+// ── Frequency helpers ────────────────────────────────────────────────────────
+function freqToDays(unit, every, times) {
+  const period = unit==="week" ? every*7 : unit==="month" ? every*30 : every*365;
+  return Math.max(1, Math.round(period / times));
+}
+function freqLabel(unit, every, times) {
+  const u = unit==="week"?"週":unit==="month"?"月":"年";
+  return `每${every>1?every:""}${u}${times}次`;
+}
+function daysToFreq(days) {
+  if (days <= 7)  return {unit:"week",  every:1, times:1};
+  if (days <= 10) return {unit:"month", every:1, times:3};
+  if (days <= 14) return {unit:"week",  every:2, times:1};
+  if (days <= 15) return {unit:"month", every:1, times:2};
+  if (days <= 30) return {unit:"month", every:1, times:1};
+  if (days <= 60) return {unit:"month", every:2, times:1};
+  if (days <= 90) return {unit:"month", every:3, times:1};
+  if (days <=182) return {unit:"month", every:6, times:1};
+  return {unit:"year", every:1, times:1};
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -849,11 +868,10 @@ function LogModal({ case_:c, methods, onClose, onSave }) {
         <div className="sheet-sub">{c.nick} · {TODAY}</div>
 
         <label className="inp-label">聯絡方式</label>
-        <div className="opt-row">
-          {safeMethods.map(m=>(
-            <div key={m} className={`opt ${method===m?"active":""}`} onClick={()=>setMethod(m)}>{m}</div>
-          ))}
-        </div>
+        <select className="inp" value={method} onChange={e=>setMethod(e.target.value)}
+          style={{cursor:"pointer",appearance:"auto"}}>
+          {safeMethods.map(m=><option key={m} value={m}>{m}</option>)}
+        </select>
 
         <label className="inp-label">備註（選填）</label>
         <input className="inp" placeholder="一兩句即可…" value={note} onChange={e=>setNote(e.target.value)} maxLength={80}/>
@@ -887,11 +905,10 @@ function ScheduleModal({ case_:c, methods, onClose, onSave }) {
         <div className="sheet-sub">{c.nick}</div>
 
         <label className="inp-label">聯絡方式</label>
-        <div className="opt-row">
-          {safeMethods.map(m=>(
-            <div key={m} className={`opt ${type===m?"active":""}`} onClick={()=>setType(m)}>{m}</div>
-          ))}
-        </div>
+        <select className="inp" value={type} onChange={e=>setType(e.target.value)}
+          style={{cursor:"pointer",appearance:"auto"}}>
+          {safeMethods.map(m=><option key={m} value={m}>{m}</option>)}
+        </select>
 
         <label className="inp-label">日期</label>
         <input type="date" className="inp" value={date} min={TODAY} onChange={e=>setDate(e.target.value)}/>
@@ -1041,7 +1058,7 @@ function HomeScreen({ cases, methods, onOpen, updateCase, showToast }) {
   function handleLogSave(id,method,note) {
     updateCase(id,prev=>({
       lastContact:TODAY,
-      nextContact:calcNext(prev.level,TODAY),
+      nextContact:calcNext(prev.level,TODAY,levelsMap),
       scheduled: null, // always clear on contact log; cycle restarts
       logs:[{date:TODAY,method,note:note||"已聯絡"},...prev.logs],
     }));
@@ -1203,7 +1220,7 @@ function order2(s){return{red:0,yellow:1,green:2,faint:3}[s];}
 // CASE DETAIL SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
 
-function DetailScreen({ case_:c, methods, onBack, updateCase, showToast }) {
+function DetailScreen({ case_:c, methods, levels: levelsMap, onBack, updateCase, showToast }) {
   const [logModal,setLogModal]         = useState(false);
   const [schedModal,setSchedModal]     = useState(false);
 
@@ -1214,7 +1231,7 @@ function DetailScreen({ case_:c, methods, onBack, updateCase, showToast }) {
   function handleLogSave(id,method,note){
     updateCase(id,prev=>({
       lastContact:TODAY,
-      nextContact:calcNext(prev.level,TODAY),
+      nextContact:calcNext(prev.level,TODAY,levelsMap),
       scheduled:null,
       logs:[{date:TODAY,method,note:note||"已聯絡"},...prev.logs],
     }));
@@ -1501,6 +1518,47 @@ function MethodsPage({ methods, setMethods, onBack }) {
 
 // ── Sub-page: 關懷等級管理 ────────────────────────────────────────────────────
 
+
+// ── FreqPicker component ─────────────────────────────────────────────────────
+function FreqPicker({ value, onChange }) {
+  const { unit, every, times } = value;
+  const UNITS  = [{k:"week",l:"週"},{k:"month",l:"月"},{k:"year",l:"年"}];
+  const EVERY  = [1,2,3,4,6,12];
+  const TIMES  = [1,2,3,4,5,7];
+  const selStyle = {background:"var(--accent)",borderColor:"var(--accent)",color:"#fff"};
+  const base = {padding:"5px 10px",borderRadius:8,border:"1px solid var(--border)",
+    fontSize:12,fontWeight:500,fontFamily:"var(--sans)",cursor:"pointer",
+    background:"var(--surface2)",color:"var(--muted)",transition:"all .1s"};
+  return (
+    <div style={{marginBottom:14}}>
+      <label className="inp-label">聯絡頻率</label>
+      <div style={{display:"flex",gap:6,marginBottom:8,alignItems:"center",flexWrap:"wrap"}}>
+        <span style={{fontSize:12,color:"var(--muted)",marginRight:2}}>每</span>
+        {EVERY.map(n=>(
+          <button key={n} style={{...base,...(every===n?selStyle:{})}}
+            onClick={()=>onChange({unit,every:n,times})}>{n}</button>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:6,marginBottom:8}}>
+        {UNITS.map(u=>(
+          <button key={u.k} style={{...base,flex:1,...(unit===u.k?selStyle:{})}}
+            onClick={()=>onChange({unit:u.k,every,times})}>{u.l}</button>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+        <span style={{fontSize:12,color:"var(--muted)",marginRight:2}}>聯絡</span>
+        {TIMES.map(n=>(
+          <button key={n} style={{...base,...(times===n?selStyle:{})}}
+            onClick={()=>onChange({unit,every,times:n})}>{n} 次</button>
+        ))}
+      </div>
+      <div style={{fontSize:11,color:"var(--accent)",marginTop:8,fontWeight:500}}>
+        → {freqLabel(unit,every,times)}，約每 {freqToDays(unit,every,times)} 天提醒一次
+      </div>
+    </div>
+  );
+}
+
 const LEVEL_COLOR_OPTIONS = [
   {key:"red",    label:"紅", bg:"#FDECEA", color:"#C0392B"},
   {key:"yellow", label:"黃", bg:"#FDF8EE", color:"#C99B2A"},
@@ -1516,7 +1574,9 @@ function LevelsPage({ levels, setLevels, onBack }) {
 
   function startEdit(k) {
     setEditKey(k); setAdding(false);
-    setForm({label:levels[k].label, days:levels[k].days, desc:levels[k].desc, colorKey:levels[k].colorKey||"yellow"});
+    const {unit,every,times} = daysToFreq(levels[k].days||7);
+    setForm({label:levels[k].label, days:levels[k].days, desc:levels[k].desc,
+      colorKey:levels[k].colorKey||"yellow", freqUnit:unit, freqEvery:every, freqTimes:times});
   }
   function saveEdit() {
     if (!form.label?.trim()) return;
@@ -1528,7 +1588,7 @@ function LevelsPage({ levels, setLevels, onBack }) {
     setLevels(prev=>{const n={...prev};delete n[k];return n;});
     setEditKey(null);
   }
-  function startAdd() { setAdding(true); setEditKey(null); setNewForm({key:"",label:"",days:14,desc:"",colorKey:"yellow"}); setErr(""); }
+  function startAdd() { setAdding(true); setEditKey(null); setNewForm({key:"",label:"",days:14,desc:"每兩週1次",colorKey:"yellow",freqUnit:"week",freqEvery:2,freqTimes:1}); setErr(""); }
   function saveAdd() {
     const k = newForm.key.trim().toUpperCase();
     if (!k || !newForm.label.trim()) { setErr("請填寫 ID 和名稱"); return; }
@@ -1561,13 +1621,11 @@ function LevelsPage({ levels, setLevels, onBack }) {
                     <label className="inp-label">名稱</label>
                     <input className="inp" style={{marginBottom:0}} value={form.label} onChange={e=>setForm(f=>({...f,label:e.target.value}))} autoFocus/>
                   </div>
-                  <div>
-                    <label className="inp-label">天數</label>
-                    <input className="inp" style={{marginBottom:0}} type="number" min={1} value={form.days} onChange={e=>setForm(f=>({...f,days:e.target.value}))}/>
-                  </div>
                 </div>
-                <label className="inp-label">頻率說明</label>
-                <input className="inp" value={form.desc} placeholder="例：每週一次電訪" onChange={e=>setForm(f=>({...f,desc:e.target.value}))} style={{marginBottom:8}}/>
+                <FreqPicker
+                  value={{unit:form.freqUnit||"week",every:form.freqEvery||1,times:form.freqTimes||1}}
+                  onChange={({unit,every,times})=>setForm(f=>({...f,freqUnit:unit,freqEvery:every,freqTimes:times,days:freqToDays(unit,every,times),desc:freqLabel(unit,every,times)}))}
+                />
                 <label className="inp-label">顏色</label>
                 <div className="opt-row" style={{marginBottom:10}}>
                   {LEVEL_COLOR_OPTIONS.map(c=>(
@@ -1611,15 +1669,10 @@ function LevelsPage({ levels, setLevels, onBack }) {
                 </div>
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
-                <div>
-                  <label className="inp-label">天數</label>
-                  <input className="inp" style={{marginBottom:0}} type="number" min={1} value={newForm.days} onChange={e=>setNewForm(f=>({...f,days:e.target.value}))}/>
-                </div>
-                <div>
-                  <label className="inp-label">頻率說明</label>
-                  <input className="inp" style={{marginBottom:0}} placeholder="每週一次" value={newForm.desc} onChange={e=>setNewForm(f=>({...f,desc:e.target.value}))}/>
-                </div>
-              </div>
+              <FreqPicker
+                value={{unit:newForm.freqUnit||"week",every:newForm.freqEvery||2,times:newForm.freqTimes||1}}
+                onChange={({unit,every,times})=>setNewForm(f=>({...f,freqUnit:unit,freqEvery:every,freqTimes:times,days:freqToDays(unit,every,times),desc:freqLabel(unit,every,times)}))}
+              />
               <label className="inp-label">顏色</label>
               <div className="opt-row" style={{marginBottom:8}}>
                 {LEVEL_COLOR_OPTIONS.map(c=>(
@@ -1712,7 +1765,7 @@ function SettingsScreen({ methods, setMethods, levels, setLevels }) {
         </div>
         <div className="set-row">
           <span className="set-label">版本</span>
-          <span className="set-val">v10.0</span>
+          <span className="set-val">v11.0</span>
         </div>
       </div>
     </div>
@@ -1811,8 +1864,7 @@ export default function App() {
   return (
     <>
       <style>{css}</style>
-      <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#D8D8D4"}}>
-        <div className="shell">
+      <div className="shell">
           <div className="screen">
             {tab==="home" && (
               <HomeScreen cases={cases} methods={methods} onOpen={openCase}
@@ -1822,7 +1874,7 @@ export default function App() {
               <CasesScreen cases={cases} onOpen={openCase} onAdd={()=>setAddOpen(true)} deleteCase={deleteCase}/>
             )}
             {tab==="detail" && detailCase && (
-              <DetailScreen case_={detailCase} methods={methods} onBack={closeDetail}
+              <DetailScreen case_={detailCase} methods={methods} levels={levels} onBack={closeDetail}
                 updateCase={updateCase} showToast={showToast}/>
             )}
             {tab==="calendar" && (
@@ -1853,7 +1905,6 @@ export default function App() {
               </button>
             ))}
           </div>
-        </div>
       </div>
     </>
   );
