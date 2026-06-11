@@ -12,8 +12,8 @@ export default defineConfig({
         name: 'ReCon｜再聯絡',
         short_name: '再聯絡',
         description: '個案聯絡與訪視提醒工具',
-        theme_color: '#3755A3',
-        background_color: '#F5F5F3',
+        theme_color: '#2C4A7C',
+        background_color: '#F8F7F4',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',
@@ -23,17 +23,7 @@ export default defineConfig({
         ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'google-fonts-cache',
-              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 }
-            }
-          }
-        ]
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}']
       }
     })
   ]
