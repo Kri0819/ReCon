@@ -908,51 +908,58 @@ function CasesScreen({ cases, methods, levels, onAdd, onOpen, updateCase, delete
 // ─────────────────────────────────────────────────────────────────────────────
 
 
-function VisitModal({ case_:c, onClose, onSave }) {
-  const d7 = new Date(TODAY); d7.setDate(d7.getDate()+7);
-  const [date, setDate] = useState(d7.toISOString().slice(0,10));
-  const [time, setTime] = useState("");
-  const [note, setNote] = useState("");
-
+function EditLogPanel({ log, methods, onClose, onSave, onDelete }) {
+  const [date,       setDate]   = useState(log.date||TODAY);
+  const [time,       setTime]   = useState(log.time||"");
+  const [method,     setMethod] = useState(log.method||(methods[0]||"電話"));
+  const [note,       setNote]   = useState(log.note||"");
+  const [confirmDel, setConfirmDel] = useState(false);
   return (
-    <div className="overlay center" onClick={onClose}>
-      <div className="sheet center" onClick={e=>e.stopPropagation()}>
-        <div className="sheet-title">預約訪視</div>
-        <div className="sheet-sub" style={{marginBottom:16}}>{c.nick}</div>
-        <label className="inp-label">訪視日期</label>
-        <input type="date" className="inp" value={date} min={TODAY}
-          onChange={e=>setDate(e.target.value)}/>
-        <label className="inp-label">時間（選填，不填視為全天）</label>
-        <input type="time" className="inp" value={time}
-          onChange={e=>setTime(e.target.value)}/>
-        <label className="inp-label">備註（選填）</label>
-        <input className="inp" placeholder="地點或注意事項…" value={note}
-          onChange={e=>setNote(e.target.value)} maxLength={60}/>
-        <div className="btn-row">
-          <button className="act-btn" onClick={onClose}>取消</button>
-          <button className="act-btn primary" onClick={()=>{
-            if(!date) return;
-            onSave(c.id, date, time, note.trim());
-            onClose();
-          }} disabled={!date}>確認預約</button>
-        </div>
-      </div>
+    <div style={{margin:"-4px 22px 8px 50px",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"0 0 var(--r) var(--r)",padding:"12px 14px"}}>
+      {confirmDel ? (
+        <>
+          <div style={{fontSize:12,color:"var(--red)",marginBottom:8}}>確認刪除這筆紀錄？</div>
+          <div style={{display:"flex",gap:6}}>
+            <button className="act-btn" style={{flex:1,fontSize:12}} onClick={()=>setConfirmDel(false)}>取消</button>
+            <button className="act-btn danger" style={{flex:1,fontSize:12}} onClick={onDelete}>確認刪除</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div style={{display:"flex",gap:8,marginBottom:8}}>
+            <input type="date" className="inp" style={{flex:1,marginBottom:0,height:36,padding:"0 10px",fontSize:12}}
+              value={date} onChange={e=>setDate(e.target.value)}/>
+            <select className="inp" style={{flex:1,marginBottom:0,height:36,padding:"0 8px",fontSize:12}}
+              value={method} onChange={e=>setMethod(e.target.value)}>
+              {(methods||["電話"]).map(m=><option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+          <input type="time" className="inp" style={{marginBottom:8,height:36,padding:"0 10px",fontSize:12}}
+            value={time} onChange={e=>setTime(e.target.value)} placeholder="時間（選填）"/>
+          <input className="inp" style={{marginBottom:8,height:36,padding:"0 10px",fontSize:12}}
+            value={note} onChange={e=>setNote(e.target.value)} placeholder="備註（選填）" maxLength={120}/>
+          <div style={{display:"flex",gap:6}}>
+            <button className="act-btn danger" style={{fontSize:11,padding:"4px 10px"}} onClick={()=>setConfirmDel(true)}>刪除</button>
+            <button className="act-btn" style={{flex:1,fontSize:12}} onClick={onClose}>取消</button>
+            <button className="act-btn primary" style={{flex:1,fontSize:12}}
+              onClick={()=>onSave({...log,date,time,method,note})}>儲存</button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
-
 function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast }){
   const [logModal,       setLogModal]       = useState(false);
   const [visitModal,     setVisitModal]     = useState(false);
+  const [editLogIdx,     setEditLogIdx]     = useState(null); // index of log being edited
   const [archiveConfirm, setArchiveConfirm] = useState(false);
   const [editModal,      setEditModal]      = useState(false);
   const ts = getTrackStatus(c);
-  // 本月是否已有訪視排定（trackingPlans 含 method=訪視 且本月已完成≥1，或 logs 本月有訪視紀錄）
   const thisMonth = TODAY.slice(0,7);
   const monthVisitDone = (c.logs||[]).some(l=>l.date?.startsWith(thisMonth)&&(l.method==="訪視"||l.method==="家訪"));
-  const monthVisitPlanned = (c.trackingPlans||[]).some(p=>(p.method==="訪視"||p.method==="家訪")&&p.nextDue?.startsWith(thisMonth));
-  const hasMonthVisit = monthVisitDone || monthVisitPlanned;
+  const hasMonthVisit = monthVisitDone;
 
   function handleLogSave(id, method, note, planId){
     updateCase(id, prev=>{
@@ -992,12 +999,26 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
           </div>
           {ts.results.map((r,i)=>(
             <div key={i} className="plan-row">
-              <div>
+              <div style={{flex:1}}>
                 <div className="plan-name">{r.name||r.method}</div>
-                <div className="plan-freq">{r.method} · {FREQ_OPTIONS.find(f=>f.key===r.freq)?.label} · {r.nextDue?`下次 ${r.nextDue.slice(5)}`:""}</div>
+                <div className="plan-freq">{r.method} · {FREQ_OPTIONS.find(f=>f.key===r.freq)?.label}
+                  {r.nextDue&&<span style={{color:"var(--accent)"}}> · 下次 {r.nextDue.slice(5)}{r.visitTime?" "+r.visitTime:""}</span>}
+                </div>
               </div>
-              <div className={`plan-prog ${r.done>=r.goal?"done":"todo"}`}>
-                {r.done}/{r.goal} {r.done>=r.goal?"✓":"⚠"}
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <div className={`plan-prog ${r.done>=r.goal?"done":"todo"}`}>
+                  {r.done}/{r.goal} {r.done>=r.goal?"✓":"⚠"}
+                </div>
+                {r.nextDue&&(
+                  <button className="act-btn danger" style={{fontSize:11,padding:"3px 8px",flexShrink:0}}
+                    onClick={()=>{
+                      updateCase(c.id,prev=>({
+                        trackingPlans:(prev.trackingPlans||[]).map(p=>
+                          p.id===r.id?{...p,nextDue:null,visitTime:""}:p)
+                      }));
+                      showToast("已取消預約");
+                    }}>取消預約</button>
+                )}
               </div>
             </div>
           ))}
@@ -1037,31 +1058,46 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
       </div>
       {(!c.logs||c.logs.length===0)&&<div style={{margin:"0 16px 12px",padding:"12px 14px",background:"var(--surface2)",borderRadius:"var(--r)",fontSize:12,color:"var(--muted)"}}>尚無聯絡紀錄，點「記錄聯絡」開始記錄。</div>}
       {(c.logs||[]).map((log,i)=>(
-        <div className="log-item" key={i}>
-          <div className="log-line"/>
-          <div className="log-body">
-            <div className="log-date">
-              {log.date} · <span style={{background:"var(--surface2)",padding:"1px 7px",borderRadius:4,fontSize:11}}>{log.method}</span>
-              {log.planId&&(()=>{const p=c.trackingPlans?.find(p=>p.id===log.planId);return p?<span style={{marginLeft:4,fontSize:10,color:"var(--accent-mid)"}}>{p.name||p.method}</span>:null;})()}
+        <div key={i}>
+          <div className="log-item" style={{cursor:"pointer"}} onClick={()=>setEditLogIdx(editLogIdx===i?null:i)}>
+            <div className="log-line"/>
+            <div className="log-body" style={{flex:1}}>
+              <div className="log-date">
+                {log.date} · <span style={{background:"var(--surface2)",padding:"1px 7px",borderRadius:4,fontSize:11}}>{log.method}</span>
+                {log.planId&&(()=>{const p=c.trackingPlans?.find(p=>p.id===log.planId);return p?<span style={{marginLeft:4,fontSize:10,color:"var(--accent-mid)"}}>{p.name||p.method}</span>:null;})()}
+              </div>
+              <div className="log-note" style={{marginTop:3}}>{log.note}</div>
             </div>
-            <div className="log-note" style={{marginTop:3}}>{log.note}</div>
+            <div style={{fontSize:11,color:"var(--muted)",flexShrink:0,alignSelf:"center"}}>⋯</div>
           </div>
+          {editLogIdx===i&&(
+            <EditLogPanel log={log} idx={i} onClose={()=>setEditLogIdx(null)}
+              methods={methods}
+              onSave={(newLog)=>{
+                updateCase(c.id,prev=>({
+                  logs:prev.logs.map((l,j)=>j===i?newLog:l)
+                }));
+                setEditLogIdx(null); showToast("已更新");
+              }}
+              onDelete={()=>{
+                updateCase(c.id,prev=>({
+                  logs:prev.logs.filter((_,j)=>j!==i)
+                }));
+                setEditLogIdx(null); showToast("已刪除");
+              }}/>
+          )}
         </div>
       ))}
 
       {logModal&&<LogModal case_={c} methods={methods} onClose={()=>setLogModal(false)} onSave={handleLogSave}/>}
-      {visitModal&&(
-        <VisitModal case_={c} onClose={()=>setVisitModal(false)}
-          onSave={(id,date,time,note)=>{
-            updateCase(id,prev=>({
-              trackingPlans:(prev.trackingPlans||[]).map(p=>
-                (p.method==="訪視"||p.method==="家訪")?{...p,nextDue:date,visitTime:time||""}:p
-              ),
-              logs:[{date:TODAY,method:"備註",note:`預約訪視：${date}${time?" "+time:""}${note?" · "+note:""}`},...(prev.logs||[])]
-            }));
-            showToast(`已預約訪視 ${date.slice(5)}${time?" "+time:""}`);
-          }}/>
-      )}
+      {visitModal&&<VisitModal case_={c} methods={methods} onClose={()=>setVisitModal(false)}
+        onSave={(id,method,date,time,note)=>{
+          updateCase(id,prev=>({
+            trackingPlans:(prev.trackingPlans||[]).map(p=>
+              p.method===method?{...p,nextDue:date,visitTime:time||"",visitNote:note||""}:p),
+          }));
+          showToast(`已預約${method} ${date.slice(5)}${time?" "+time:""}`);
+        }}/>}
       {editModal&&<EditCaseModal case_={c} methods={methods} levels={levels}
         onClose={()=>setEditModal(false)} onSave={handleEditSave}
         onDelete={(id)=>{updateCase(id,()=>null);onBack();}}/>}
@@ -1072,6 +1108,39 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
 // ─────────────────────────────────────────────────────────────────────────────
 // CALENDAR SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
+
+
+function VisitModal({ case_:c, methods, onClose, onSave }) {
+  const d7 = new Date(TODAY); d7.setDate(d7.getDate()+7);
+  const visitMethods = (methods||[]).filter(m=>["訪視","家訪","訪談","學校訪談"].includes(m));
+  const defaultMethod = visitMethods.length>0 ? visitMethods[0] : (methods||["訪視"])[0];
+  const [method, setMethod] = useState(defaultMethod);
+  const [date, setDate]     = useState(d7.toISOString().slice(0,10));
+  const [time, setTime]     = useState("");
+  const [note, setNote]     = useState("");
+  return (
+    <div className="overlay center" onClick={onClose}>
+      <div className="sheet center" onClick={e=>e.stopPropagation()}>
+        <div className="sheet-title">預約訪視</div>
+        <div className="sheet-sub" style={{marginBottom:16}}>{c.nick}</div>
+        <label className="inp-label">訪視方式</label>
+        <select className="inp" value={method} onChange={e=>setMethod(e.target.value)}>
+          {(methods||["訪視"]).map(m=><option key={m} value={m}>{m}</option>)}
+        </select>
+        <label className="inp-label">訪視日期</label>
+        <input type="date" className="inp" value={date} min={TODAY} onChange={e=>setDate(e.target.value)}/>
+        <label className="inp-label">時間（選填，不填視為全天）</label>
+        <input type="time" className="inp" value={time} onChange={e=>setTime(e.target.value)}/>
+        <label className="inp-label">備註（選填）</label>
+        <input className="inp" placeholder="地點或注意事項…" value={note} onChange={e=>setNote(e.target.value)} maxLength={60}/>
+        <div className="btn-row">
+          <button className="act-btn" onClick={onClose}>取消</button>
+          <button className="act-btn primary" disabled={!date} onClick={()=>{onSave(c.id,method,date,time,note.trim());onClose();}}>確認預約</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function CalendarScreen({ cases, onOpen }){
   const tp=TODAY.split("-").map(Number);
@@ -1135,17 +1204,9 @@ function CalendarScreen({ cases, onOpen }){
       <div className="day-panel">
         <div className="day-panel-hd">{sel.slice(5).replace("-","/")} · {selEvts.length===0?"無行程":`${selEvts.length} 項`}</div>
         {selEvts.length===0&&<div style={{padding:"16px",fontSize:13,color:"var(--muted)"}}>這天沒有排定追蹤</div>}
-        {[...selEvts].sort((a,b)=>{
-          // 有時間的按時間排，沒時間(全天)排前面
-          if(!a.time&&!b.time) return 0;
-          if(!a.time) return -1;
-          if(!b.time) return 1;
-          return a.time.localeCompare(b.time);
-        }).map((e,i)=>(
+        {[...selEvts].sort((a,b)=>(!a.time?-1:!b.time?1:a.time.localeCompare(b.time))).map((e,i)=>(
           <div className="day-item" key={i} onClick={()=>onOpen(e.id)}>
-            <div className="day-time" style={{color:e.time?"var(--text2)":"var(--muted)"}}>
-              {e.time||"—"}
-            </div>
+            <div className="day-time">{e.time||"—"}</div>
             <div className="day-nick">{e.nick}</div>
             <div className="day-meth">{e.type}</div>
           </div>
@@ -1394,7 +1455,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
       <div className="sec-label">顯示</div>
       <div className="settings-group">
         <div className="settings-row static">
-          <div><div className="s-label">外觀模式</div><div className="s-sub">{theme==="dark"?"深色模式":"淺色模式"}</div></div>
+          <div><div className="s-label">外觀模式</div><div className="s-sub">{theme==="dark"?"深色":"淺色"}</div></div>
           <div style={{display:"flex",gap:8}}>
             <button className={`act-btn ${theme!=="dark"?"primary":""}`} style={{padding:"5px 14px",fontSize:12}} onClick={()=>setTheme("light")}>淺色</button>
             <button className={`act-btn ${theme==="dark"?"primary":""}`} style={{padding:"5px 14px",fontSize:12}} onClick={()=>setTheme("dark")}>深色</button>
@@ -1408,7 +1469,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="28" height="28" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.5</span>
+          <span className="s-val">v15.6</span>
         </div>
       </div>
     </div>
@@ -1424,8 +1485,8 @@ export default function App(){
   const [methods, setMethods] = useState(()=>lsGet(LS.methods, INITIAL_METHODS));
   const [levels,  setLevels]  = useState(()=>lsGet(LS.levels,  INITIAL_LEVELS));
   const [theme,   setThemeRaw]= useState(()=>{ try{return localStorage.getItem(LS.theme)||"light"}catch{return "light"} });
-  const [tab,     setTab]     = useState("home");
   function setTheme(t){ setThemeRaw(t); try{localStorage.setItem(LS.theme,t)}catch{} }
+  const [tab,     setTab]     = useState("home");
   const [detailId,setDetailId]= useState(null);
   const [toast,   setToast]   = useState(null);
   const [addOpen, setAddOpen] = useState(false);
