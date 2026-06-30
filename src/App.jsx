@@ -1082,7 +1082,6 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
           <button className="back-btn" onClick={onBack}>‹ 返回</button>
           <div style={{display:"flex",alignItems:"center",gap:8,marginTop:4}}>
             <div className="det-title">{c.nick}</div>
-            <LevelBadge levelKey={c.level} levels={levels}/>
           </div>
         </div>
         <div style={{display:"flex",gap:8}}>
@@ -1102,7 +1101,6 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
               <div style={{flex:1}}>
                 <div className="plan-name">{r.name||r.method}</div>
                 <div className="plan-freq">{r.method} · {FREQ_OPTIONS.find(f=>f.key===r.freq)?.label}
-                  {" · "}{periodLabel(r.freq)} {getPeriodStart(r.freq).slice(5)}–{getPeriodEnd(r.freq).slice(5)}
                   {r.nextDue&&<span style={{color:"var(--accent)"}}> · 下次 {r.nextDue.slice(5)}{r.visitTime?" "+r.visitTime:""}</span>}
                 </div>
               </div>
@@ -1127,8 +1125,17 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
       )}
 
       <div className="info-grid">
-        <div className="info-cell"><div className="info-label">上次聯絡</div><div className="info-val">{c.lastContact?.slice(5)||"—"}</div></div>
-        <div className="info-cell"><div className="info-label">個案編號</div><div className="info-val">{c.id}</div></div>
+        <div className="info-cell"><div className="info-label">上次聯絡</div><div className="info-val">{c.lastContact?c.lastContact.slice(5).replace("-","/"):"—"}</div></div>
+        <div className="info-cell">
+          <div className="info-label">下次連絡</div>
+          <div className="info-val">
+            {(()=>{
+              const ts2=getTrackStatus(c);
+              const next=ts2?.results.filter(r=>r.done<r.goal&&r.nextDue).sort((a,b)=>a.nextDue>b.nextDue?1:-1)[0];
+              return next?next.nextDue.slice(5).replace("-","/"):"—";
+            })()}
+          </div>
+        </div>
         {c.note&&<div className="info-cell full"><div className="info-label">備註</div><div className="info-val" style={{fontWeight:400,fontSize:13,lineHeight:1.5}}>{c.note}</div></div>}
       </div>
 
@@ -1570,7 +1577,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.21</span>
+          <span className="s-val">v15.22</span>
         </div>
       </div>
     </div>
