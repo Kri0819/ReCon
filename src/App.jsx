@@ -179,11 +179,14 @@ select.inp{cursor:pointer;appearance:auto;height:44px}
 @keyframes tout{from{opacity:1}to{opacity:0}}
 .ring-uncompleted{
   width:20px;height:20px;border-radius:50%;flex-shrink:0;
-  border:2px solid #D8D5CC;background:transparent;
+  border:2px dashed #D8D5CC;background:transparent;
 }
 .ring-completed{
-  width:24px;height:24px;border-radius:50%;flex-shrink:0;
+  width:20px;height:20px;border-radius:50%;flex-shrink:0;
+  padding:2px;
   background:linear-gradient(135deg,#2F4E6E 0%,#6BA7A1 100%);
+  -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 2px),#000 calc(100% - 2px));
+  mask:radial-gradient(farthest-side,transparent calc(100% - 2px),#000 calc(100% - 2px));
 }
 .filter-row{display:flex;gap:8px;padding:0 16px 14px;overflow-x:auto;-webkit-overflow-scrolling:touch}
 .filter-row::-webkit-scrollbar{display:none}
@@ -1490,7 +1493,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="28" height="28" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.9</span>
+          <span className="s-val">v15.10</span>
         </div>
       </div>
     </div>
