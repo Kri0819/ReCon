@@ -36,7 +36,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--sans);font-size:14p
 .bnav-label{font-size:10px;letter-spacing:.04em;color:var(--muted);font-weight:500}
 .bnav-btn.active .bnav-icon{opacity:1}
 .bnav-btn.active .bnav-label{color:var(--accent);font-weight:600}
-.ph{padding:calc(env(safe-area-inset-top,0px) + 20px) 22px 16px;display:flex;align-items:flex-end;justify-content:space-between;background:var(--bg)}
+.ph{padding:calc(env(safe-area-inset-top,0px) + 20px) 22px 18px;display:flex;align-items:flex-end;justify-content:space-between;background:var(--bg)}
 .ph-eyebrow{font-family:var(--serif);font-size:11px;font-weight:300;letter-spacing:.08em;color:var(--muted);margin-bottom:2px}
 .ph-title{font-family:var(--serif);font-size:22px;font-weight:400;letter-spacing:-.01em;color:var(--text);line-height:1.2}
 .ph-sub{font-size:12px;color:var(--muted);font-weight:400}
@@ -62,7 +62,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--sans);font-size:14p
 .plan-prog{font-size:12px;font-weight:600}
 .plan-prog.done{color:var(--green)}.plan-prog.todo{color:var(--yellow)}
 /* Card rows */
-.card-row{background:var(--surface);border-radius:var(--r);margin:0 16px 10px;padding:14px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;border:1px solid var(--border);transition:box-shadow .12s,border-color .12s}
+.card-row{background:var(--surface);border-radius:var(--r);margin:0 22px 12px;padding:18px 18px;display:flex;align-items:center;gap:14px;cursor:pointer;border:1px solid var(--border);transition:box-shadow .12s,border-color .12s}
 .card-row:active{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-lt)}
 .row-main{flex:1;min-width:0}
 .row-nick{font-size:15px;font-weight:500;color:var(--text)}
@@ -93,7 +93,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--sans);font-size:14p
 .log-date{font-size:11px;color:var(--muted);margin-bottom:3px}
 .log-note{font-size:13px;color:var(--text2)}
 /* Calendar */
-.cal-wrap{margin:0 10px;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;background:var(--surface)}
+.cal-wrap{margin:0 18px;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;background:var(--surface)}
 .cal-head{display:flex;border-bottom:1px solid var(--border)}
 .cal-th{flex:1;text-align:center;font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px 0 7px}
 .cal-body{display:grid;grid-template-columns:repeat(7,1fr)}
@@ -112,7 +112,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--sans);font-size:14p
 .cal-month{font-family:var(--serif);font-size:17px;font-weight:400;letter-spacing:-.01em}
 .cal-arrow{width:32px;height:32px;border-radius:50%;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;color:var(--muted);font-family:var(--sans);transition:all .1s}
 .cal-arrow:active{background:var(--accent-lt);color:var(--accent)}
-.day-panel{margin:12px 10px 0;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.day-panel{margin:12px 18px 0;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
 .day-panel-hd{padding:12px 16px;border-bottom:1px solid var(--border);font-family:var(--serif);font-size:13px;color:var(--muted)}
 .day-item{display:flex;align-items:center;gap:14px;padding:11px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s}
 .day-item:last-child{border-bottom:none}
@@ -158,8 +158,8 @@ select.inp{cursor:pointer;appearance:auto;height:44px}
 /* Task editor */
 .task-item{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;margin-bottom:8px}
 /* Swipe */
-.swipe-row{position:relative;overflow:hidden;margin:0 16px 10px;border-radius:var(--r)}
-.swipe-card{display:flex;align-items:center;gap:12px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);cursor:pointer;position:relative;z-index:1;transform:translateX(0);transition:transform .25s ease;user-select:none;-webkit-user-select:none}
+.swipe-row{position:relative;overflow:hidden;margin:0 22px 12px;border-radius:var(--r)}
+.swipe-card{display:flex;align-items:center;gap:14px;padding:18px 18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);cursor:pointer;position:relative;z-index:1;transform:translateX(0);transition:transform .25s ease;user-select:none;-webkit-user-select:none}
 .swipe-card.swiped{transform:translateX(-148px)}
 .swipe-actions{position:absolute;right:0;top:0;bottom:0;width:148px;display:flex;border-radius:0 var(--r) var(--r) 0;overflow:hidden}
 .swipe-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:none;cursor:pointer;font-family:var(--sans);font-size:11px;font-weight:600}
@@ -179,7 +179,7 @@ select.inp{cursor:pointer;appearance:auto;height:44px}
 @keyframes tout{from{opacity:1}to{opacity:0}}
 .ring-uncompleted{
   width:16px;height:16px;border-radius:50%;flex-shrink:0;
-  border:1.5px dashed #D8D5CC;background:transparent;
+  border:2px dashed #ABA690;background:transparent;
 }
 .ring-completed{
   width:16px;height:16px;border-radius:50%;flex-shrink:0;
@@ -1496,7 +1496,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="28" height="28" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.11</span>
+          <span className="s-val">v15.12</span>
         </div>
       </div>
     </div>
