@@ -177,6 +177,14 @@ select.inp{cursor:pointer;appearance:auto;height:44px}
 .toast{position:absolute;bottom:88px;left:50%;transform:translateX(-50%);background:rgba(18,16,12,.88);color:#fff;font-size:12px;font-weight:500;padding:9px 18px;border-radius:20px;z-index:200;white-space:nowrap;pointer-events:none;letter-spacing:.01em;animation:tin .18s ease,tout .28s ease 1.5s forwards}
 @keyframes tin{from{opacity:0;transform:translateX(-50%) translateY(6px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 @keyframes tout{from{opacity:1}to{opacity:0}}
+.ring-uncompleted{
+  width:20px;height:20px;border-radius:50%;flex-shrink:0;
+  border:2px solid #D8D5CC;background:transparent;
+}
+.ring-completed{
+  width:24px;height:24px;border-radius:50%;flex-shrink:0;
+  background:linear-gradient(135deg,#2F4E6E 0%,#6BA7A1 100%);
+}
 .filter-row{display:flex;gap:8px;padding:0 16px 14px;overflow-x:auto;-webkit-overflow-scrolling:touch}
 .filter-row::-webkit-scrollbar{display:none}
 .filter-chip{flex-shrink:0;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:500;border:1px solid var(--border2);background:var(--surface);color:var(--text2);cursor:pointer;white-space:nowrap;transition:all .12s}
@@ -794,18 +802,11 @@ function HomeScreen({ cases, methods, levels, updateCase, showToast }){
               <div className="card-row" key={c.id}
                 style={{cursor:"pointer",alignItems:"center",gap:14}}
                 onClick={()=>setLogModal(c)}>
-                {/* 圓圈：逾期=實線紅、完成=實線綠、其他=虛線 */}
+                {/* 圓圈：未完成=淺灰小圓，完成=深藍→綠漸層實心圓（logo 色系） */}
                 {(()=>{
                   const ts=getTrackStatus(c);
-                  const overdue=c._status==="red";
                   const done=ts?.allDone;
-                  return (
-                    <div style={{
-                      width:24,height:24,borderRadius:"50%",flexShrink:0,
-                      border:`2px ${done?"solid":"dashed"} ${done?"var(--green)":overdue?"var(--red)":"var(--border2)"}`,
-                      background:done?"var(--green-bg)":"transparent",
-                    }}/>
-                  );
+                  return <div className={done?"ring-completed":"ring-uncompleted"}/>;
                 })()}
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:"flex",alignItems:"center",gap:6}}>
@@ -1489,7 +1490,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="28" height="28" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.8</span>
+          <span className="s-val">v15.9</span>
         </div>
       </div>
     </div>
