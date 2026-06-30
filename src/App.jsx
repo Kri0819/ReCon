@@ -592,6 +592,17 @@ function LogModal({ case_:c, methods, onClose, onSave }){
         <div className="sheet-title">記錄聯絡</div>
         <div className="sheet-sub" style={{marginBottom:16}}>{c.nick}</div>
 
+        <label className="inp-label">日期與時間</label>
+        <div style={{display:"flex",gap:8,marginBottom:14}}>
+          <input type="date" className="inp" style={{flex:1,marginBottom:0}} value={date} max={TODAY} onChange={e=>setDate(e.target.value)}/>
+          <input type="time" className="inp" style={{flex:1,marginBottom:0}} value={time} onChange={e=>setTime(e.target.value)}/>
+        </div>
+
+        <label className="inp-label">聯絡方式</label>
+        <select className="inp" value={method} onChange={e=>onMethodChange(e.target.value)}>
+          {safe.map(m=><option key={m} value={m}>{m}</option>)}
+        </select>
+
         {plans.length>0&&(
           <>
             <label className="inp-label">關聯追蹤任務</label>
@@ -618,15 +629,6 @@ function LogModal({ case_:c, methods, onClose, onSave }){
           </>
         )}
 
-        <label className="inp-label">聯絡方式</label>
-        <select className="inp" value={method} onChange={e=>onMethodChange(e.target.value)}>
-          {safe.map(m=><option key={m} value={m}>{m}</option>)}
-        </select>
-        <label className="inp-label">日期與時間</label>
-        <div style={{display:"flex",gap:8,marginBottom:14}}>
-          <input type="date" className="inp" style={{flex:1,marginBottom:0}} value={date} max={TODAY} onChange={e=>setDate(e.target.value)}/>
-          <input type="time" className="inp" style={{flex:1,marginBottom:0}} value={time} onChange={e=>setTime(e.target.value)}/>
-        </div>
         <label className="inp-label">備註（選填）</label>
         <input className="inp" placeholder="一兩句即可…" value={note} onChange={e=>setNote(e.target.value)} maxLength={120}/>
         <div className="btn-row">
@@ -1544,7 +1546,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.16</span>
+          <span className="s-val">v15.17</span>
         </div>
       </div>
     </div>
