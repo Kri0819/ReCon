@@ -177,6 +177,10 @@ select.inp{cursor:pointer;appearance:auto;height:44px}
 .toast{position:absolute;bottom:88px;left:50%;transform:translateX(-50%);background:rgba(18,16,12,.88);color:#fff;font-size:12px;font-weight:500;padding:9px 18px;border-radius:20px;z-index:200;white-space:nowrap;pointer-events:none;letter-spacing:.01em;animation:tin .18s ease,tout .28s ease 1.5s forwards}
 @keyframes tin{from{opacity:0;transform:translateX(-50%) translateY(6px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 @keyframes tout{from{opacity:1}to{opacity:0}}
+.filter-row{display:flex;gap:8px;padding:0 16px 14px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.filter-row::-webkit-scrollbar{display:none}
+.filter-chip{flex-shrink:0;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:500;border:1px solid var(--border2);background:var(--surface);color:var(--text2);cursor:pointer;white-space:nowrap;transition:all .12s}
+.filter-chip.active{background:var(--accent);border-color:var(--accent);color:#fff}
 .empty{padding:52px 24px;text-align:center;color:var(--muted);font-size:13px;line-height:1.8;font-family:var(--serif);font-weight:300}
 `;
 
@@ -831,11 +835,13 @@ function HomeScreen({ cases, methods, levels, updateCase, showToast }){
 // ─────────────────────────────────────────────────────────────────────────────
 
 function CasesScreen({ cases, methods, levels, onAdd, onOpen, updateCase, deleteCase, showToast }){
-  const [swipedId,  setSwipedId]  = useState(null);
-  const [delConfId, setDelConfId] = useState(null);
+  const [swipedId,    setSwipedId]    = useState(null);
+  const [delConfId,   setDelConfId]   = useState(null);
+  const [levelFilter, setLevelFilter] = useState(null); // null = 全部
   const touchStartX = useRef(0);
-  const active = cases.filter(c=>!c.archived);
-  const sorted = [...active].sort((a,b)=>order2(getCaseStatus(a))-order2(getCaseStatus(b)));
+  const active   = cases.filter(c=>!c.archived);
+  const filtered = levelFilter ? active.filter(c=>c.level===levelFilter) : active;
+  const sorted   = [...filtered].sort((a,b)=>order2(getCaseStatus(a))-order2(getCaseStatus(b)));
 
   return (
     <div className="screen-pad">
@@ -843,7 +849,21 @@ function CasesScreen({ cases, methods, levels, onAdd, onOpen, updateCase, delete
         <div><div className="ph-eyebrow">追蹤中的個案</div><div className="ph-title">個案列表</div></div>
         <button className="ph-action" onClick={onAdd}>＋ 新增</button>
       </div>
-      {active.length===0&&<div className="empty">目前沒有聯絡中的個案<br/>點右上角新增</div>}
+      <div className="filter-row">
+        <div className={`filter-chip ${levelFilter===null?"active":""}`}
+          onClick={()=>setLevelFilter(null)}>全部 {active.length}</div>
+        {Object.entries(levels).map(([k,l])=>{
+          const cnt = active.filter(c=>c.level===k).length;
+          if(cnt===0) return null;
+          return (
+            <div key={k} className={`filter-chip ${levelFilter===k?"active":""}`}
+              onClick={()=>setLevelFilter(levelFilter===k?null:k)}>
+              {l.label} {cnt}
+            </div>
+          );
+        })}
+      </div>
+      {filtered.length===0&&<div className="empty">{levelFilter?`沒有${levels[levelFilter]?.label}的個案`:"目前沒有聯絡中的個案"}<br/>{levelFilter?"":"點右上角新增"}</div>}
       {sorted.map(c=>{
         const st=getCaseStatus(c);
         const isSwiped=swipedId===c.id, isDelConf=delConfId===c.id;
@@ -1469,7 +1489,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="28" height="28" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.7</span>
+          <span className="s-val">v15.8</span>
         </div>
       </div>
     </div>
