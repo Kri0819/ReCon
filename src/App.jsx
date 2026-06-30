@@ -195,7 +195,10 @@ select.inp{cursor:pointer;appearance:auto;height:44px}
   width:40px;height:40px;border-radius:50%;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;
   font-size:13px;font-weight:700;
+  padding:2px;text-align:center;line-height:1.1;
+  overflow:hidden;
 }
+.level-circle.lc-long{font-size:10px;letter-spacing:-.02em;}
 .level-circle.lc-red{background:var(--red-bg);color:var(--red);border:1.5px solid #F5CECA}
 .level-circle.lc-yellow{background:var(--yellow-bg);color:var(--yellow);border:1.5px solid #EDD9A0}
 .level-circle.lc-green{background:var(--green-bg);color:var(--green);border:1.5px solid #A8D8BC}
@@ -897,14 +900,14 @@ function CasesScreen({ cases, methods, levels, onAdd, onOpen, updateCase, delete
       </div>
       <div className="filter-row">
         <div className={`filter-chip ${levelFilter===null?"active":""}`}
-          onClick={()=>setLevelFilter(null)}>全部 {active.length}</div>
+          onClick={()=>setLevelFilter(null)}>全部</div>
         {Object.entries(levels).map(([k,l])=>{
           const cnt = active.filter(c=>c.level===k).length;
           if(cnt===0) return null;
           return (
             <div key={k} className={`filter-chip ${levelFilter===k?"active":""}`}
               onClick={()=>setLevelFilter(levelFilter===k?null:k)}>
-              {l.label} {cnt}
+              {l.label}
             </div>
           );
         })}
@@ -928,10 +931,16 @@ function CasesScreen({ cases, methods, levels, onAdd, onOpen, updateCase, delete
               onClick={()=>{if(isSwiped){setSwipedId(null);return;}onOpen(c.id);}}
               onTouchStart={e=>{touchStartX.current=e.touches[0].clientX;}}
               onTouchEnd={e=>{const dx=touchStartX.current-e.changedTouches[0].clientX;if(dx>40)setSwipedId(c.id);else if(dx<-20)setSwipedId(null);}}>
-              {/* 左側：等級圓圈 */}
-              <div className={`level-circle lc-${levels[c.level]?.colorKey||"faint"}`}>
-                {c.level}
-              </div>
+              {/* 左側：等級圓圈 — 顯示完整等級名稱（1個字維持原大小，2字以上縮小字級） */}
+              {(()=>{
+                const label = levels[c.level]?.label || c.level;
+                const isShort = label.length<=1;
+                return (
+                  <div className={`level-circle lc-${levels[c.level]?.colorKey||"faint"}${isShort?"":" lc-long"}`}>
+                    {label}
+                  </div>
+                );
+              })()}
               {/* 中間：姓名 + 下次聯繫 */}
               <div className="row-main">
                 <div className="row-nick">{c.nick}</div>
@@ -1561,7 +1570,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.19</span>
+          <span className="s-val">v15.20</span>
         </div>
       </div>
     </div>
