@@ -1512,10 +1512,10 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
       <div className="settings-group">
         <div className="settings-row static">
           <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="28" height="28" style={{objectFit:"contain"}}/>
+            <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.13</span>
+          <span className="s-val">v15.14</span>
         </div>
       </div>
     </div>
