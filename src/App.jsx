@@ -1082,6 +1082,7 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
           <button className="back-btn" onClick={onBack}>‹ 返回</button>
           <div style={{display:"flex",alignItems:"center",gap:8,marginTop:4}}>
             <div className="det-title">{c.nick}</div>
+            <LevelBadge levelKey={c.level} levels={levels}/>
           </div>
         </div>
         <div style={{display:"flex",gap:8}}>
@@ -1097,18 +1098,25 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
             <span>{ts.allDone?"✓ 本期追蹤計畫已完成":"本期追蹤進度"}</span>
           </div>
           {ts.results.map((r,i)=>(
-            <div key={i} className="plan-row">
-              <div style={{flex:1}}>
-                <div className="plan-name">{r.name||r.method}</div>
-                <div className="plan-freq">{r.method} · {FREQ_OPTIONS.find(f=>f.key===r.freq)?.label}
-                  {r.nextDue&&<span style={{color:"var(--accent)"}}> · 下次 {r.nextDue.slice(5)}{r.visitTime?" "+r.visitTime:""}</span>}
+            <div key={i} className="plan-row" style={{flexDirection:"column",alignItems:"stretch",gap:8}}>
+              <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between"}}>
+                <div style={{flex:1}}>
+                  <div className="plan-name">{r.name||r.method}</div>
+                  <div className="plan-freq">{r.method} · {FREQ_OPTIONS.find(f=>f.key===r.freq)?.label}</div>
                 </div>
-              </div>
-              <div style={{display:"flex",alignItems:"center",gap:8}}>
                 <div className={`plan-prog ${r.done>=r.goal?"done":"todo"}`}>
                   {r.done}/{r.goal} {r.done>=r.goal?"✓":"⚠"}
                 </div>
-                {r.nextDue&&(
+              </div>
+              {r.nextDue&&(
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+                  <span style={{
+                    fontSize:12,color:"var(--accent)",fontWeight:500,
+                    border:"1px solid var(--accent)",borderRadius:8,
+                    padding:"3px 10px",display:"inline-block"
+                  }}>
+                    下次 {r.nextDue.slice(5)}{r.visitTime?" "+r.visitTime:""}
+                  </span>
                   <button className="act-btn danger" style={{fontSize:11,padding:"3px 8px",flexShrink:0}}
                     onClick={()=>{
                       updateCase(c.id,prev=>({
@@ -1117,8 +1125,8 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
                       }));
                       showToast("已取消預約");
                     }}>取消預約</button>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -1577,7 +1585,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.22</span>
+          <span className="s-val">v15.23</span>
         </div>
       </div>
     </div>
