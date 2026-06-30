@@ -191,6 +191,15 @@ select.inp{cursor:pointer;appearance:auto;height:44px}
   width:11px;height:11px;border-radius:50%;
   background:var(--surface);
 }
+.level-circle{
+  width:40px;height:40px;border-radius:50%;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:700;
+}
+.level-circle.lc-red{background:var(--red-bg);color:var(--red);border:1.5px solid #F5CECA}
+.level-circle.lc-yellow{background:var(--yellow-bg);color:var(--yellow);border:1.5px solid #EDD9A0}
+.level-circle.lc-green{background:var(--green-bg);color:var(--green);border:1.5px solid #A8D8BC}
+.level-circle.lc-faint{background:var(--surface2);color:var(--muted);border:1.5px solid var(--border)}
 .filter-row{display:flex;gap:8px;padding:0 16px 14px;overflow-x:auto;-webkit-overflow-scrolling:touch}
 .filter-row::-webkit-scrollbar{display:none}
 .filter-chip{flex-shrink:0;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:500;border:1px solid var(--border2);background:var(--surface);color:var(--text2);cursor:pointer;white-space:nowrap;transition:all .12s}
@@ -889,25 +898,37 @@ function CasesScreen({ cases, methods, levels, onAdd, onOpen, updateCase, delete
               onClick={()=>{if(isSwiped){setSwipedId(null);return;}onOpen(c.id);}}
               onTouchStart={e=>{touchStartX.current=e.touches[0].clientX;}}
               onTouchEnd={e=>{const dx=touchStartX.current-e.changedTouches[0].clientX;if(dx>40)setSwipedId(c.id);else if(dx<-20)setSwipedId(null);}}>
+              {/* 左側：等級圓圈 */}
+              <div className={`level-circle lc-${levels[c.level]?.colorKey||"faint"}`}>
+                {c.level}
+              </div>
+              {/* 中間：姓名 + 下次聯繫 */}
               <div className="row-main">
-                <div style={{display:"flex",alignItems:"center",gap:7}}>
-                  <span className="row-nick">{c.nick}</span>
-                  <LevelBadge levelKey={c.level} levels={levels}/>
-                </div>
+                <div className="row-nick">{c.nick}</div>
                 <div className="row-meta" style={{marginTop:4}}>
                   {(()=>{
                     const ts=getTrackStatus(c);
                     const nextPlan=ts?.results.filter(r=>r.done<r.goal&&r.nextDue).sort((a,b)=>a.nextDue>b.nextDue?1:-1)[0];
                     const nextDate=nextPlan?.nextDue||c.lastContact;
-                    const total=ts?.results.reduce((s,r)=>s+r.goal,0)||0;
-                    const done=ts?.results.reduce((s,r)=>s+Math.min(r.done,r.goal),0)||0;
-                    return (
-                      <>
-                        <span>下次：{nextDate?nextDate.slice(5):"—"}</span>
-                        {total>0&&<span style={{marginLeft:8,color:done>=total?"var(--green)":"var(--yellow)",fontWeight:500}}>本月 {done}/{total}</span>}
-                      </>
-                    );
+                    return <span>下次：{nextDate?nextDate.slice(5):"—"}</span>;
                   })()}
+                </div>
+              </div>
+              {/* 右側：本月進度 */}
+              {(()=>{
+                const ts=getTrackStatus(c);
+                const total=ts?.results.reduce((s,r)=>s+r.goal,0)||0;
+                const done=ts?.results.reduce((s,r)=>s+Math.min(r.done,r.goal),0)||0;
+                if(total===0) return null;
+                return (
+                  <div style={{flexShrink:0,textAlign:"right"}}>
+                    <div style={{fontSize:10,color:"var(--muted)",fontWeight:600,letterSpacing:".03em"}}>本月</div>
+                    <div style={{fontSize:15,fontWeight:700,color:done>=total?"var(--green)":"var(--yellow)"}}>
+                      {done}/{total}
+                    </div>
+                  </div>
+                );
+              })()}
                 </div>
               </div>
             </div>
@@ -1496,7 +1517,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="28" height="28" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.12</span>
+          <span className="s-val">v15.13</span>
         </div>
       </div>
     </div>
