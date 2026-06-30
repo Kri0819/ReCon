@@ -340,6 +340,9 @@ function getPeriodEnd(freq){
   const y=s.getFullYear(),m=s.getMonth(); return dateStr(new Date(y,m+1,0));
 }
 
+function periodLabel(freq){
+  return {weekly:"本週", biweekly:"本兩週", monthly:"本月", quarterly:"本季"}[freq] || "本期";
+}
 function countPlanLogs(logs, plan){
   const s=getPeriodStart(plan.freq), e=getPeriodEnd(plan.freq);
   return (logs||[]).filter(l=>l.date>=s&&l.date<=e&&(l.planId===plan.id||l.method===plan.method)).length;
@@ -927,12 +930,26 @@ function CasesScreen({ cases, methods, levels, onAdd, onOpen, updateCase, delete
               {/* 右側：本月進度 */}
               {(()=>{
                 const ts=getTrackStatus(c);
-                const total=ts?.results.reduce((s,r)=>s+r.goal,0)||0;
-                const done=ts?.results.reduce((s,r)=>s+Math.min(r.done,r.goal),0)||0;
-                if(total===0) return null;
+                if(!ts||!ts.results.length) return null;
+                if(ts.results.length===1){
+                  // 只有一個計畫：直接顯示該計畫的週期與進度
+                  const r=ts.results[0];
+                  return (
+                    <div style={{flexShrink:0,textAlign:"right"}}>
+                      <div style={{fontSize:10,color:"var(--muted)",fontWeight:600,letterSpacing:".03em"}}>{periodLabel(r.freq)}</div>
+                      <div style={{fontSize:15,fontWeight:700,color:r.done>=r.goal?"var(--green)":"var(--yellow)"}}>
+                        {r.done}/{r.goal}
+                      </div>
+                    </div>
+                  );
+                }
+                // 多個計畫：顯示尚未完成中最緊迫（nextDue 最近）的那個週期標籤；進度為彙總
+                const total=ts.results.reduce((s,r)=>s+r.goal,0);
+                const done=ts.results.reduce((s,r)=>s+Math.min(r.done,r.goal),0);
+                const urgent=ts.results.filter(r=>r.done<r.goal&&r.nextDue).sort((a,b)=>a.nextDue>b.nextDue?1:-1)[0]||ts.results[0];
                 return (
                   <div style={{flexShrink:0,textAlign:"right"}}>
-                    <div style={{fontSize:10,color:"var(--muted)",fontWeight:600,letterSpacing:".03em"}}>本月</div>
+                    <div style={{fontSize:10,color:"var(--muted)",fontWeight:600,letterSpacing:".03em"}}>{periodLabel(urgent.freq)}</div>
                     <div style={{fontSize:15,fontWeight:700,color:done>=total?"var(--green)":"var(--yellow)"}}>
                       {done}/{total}
                     </div>
@@ -1053,13 +1070,13 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
         <div className="plan-block">
           <div className="plan-block-hd">
             <span>{ts.allDone?"✓ 本期追蹤計畫已完成":"本期追蹤進度"}</span>
-            <span style={{fontSize:11,color:"var(--muted)"}}>{getPeriodStart("monthly").slice(5)} – {getPeriodEnd("monthly").slice(5)}</span>
           </div>
           {ts.results.map((r,i)=>(
             <div key={i} className="plan-row">
               <div style={{flex:1}}>
                 <div className="plan-name">{r.name||r.method}</div>
                 <div className="plan-freq">{r.method} · {FREQ_OPTIONS.find(f=>f.key===r.freq)?.label}
+                  {" · "}{periodLabel(r.freq)} {getPeriodStart(r.freq).slice(5)}–{getPeriodEnd(r.freq).slice(5)}
                   {r.nextDue&&<span style={{color:"var(--accent)"}}> · 下次 {r.nextDue.slice(5)}{r.visitTime?" "+r.visitTime:""}</span>}
                 </div>
               </div>
@@ -1527,7 +1544,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.15</span>
+          <span className="s-val">v15.16</span>
         </div>
       </div>
     </div>
