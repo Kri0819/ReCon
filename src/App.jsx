@@ -178,15 +178,18 @@ select.inp{cursor:pointer;appearance:auto;height:44px}
 @keyframes tin{from{opacity:0;transform:translateX(-50%) translateY(6px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 @keyframes tout{from{opacity:1}to{opacity:0}}
 .ring-uncompleted{
-  width:20px;height:20px;border-radius:50%;flex-shrink:0;
-  border:2px dashed #D8D5CC;background:transparent;
+  width:16px;height:16px;border-radius:50%;flex-shrink:0;
+  border:1.5px dashed #D8D5CC;background:transparent;
 }
 .ring-completed{
-  width:20px;height:20px;border-radius:50%;flex-shrink:0;
-  padding:2px;
+  width:16px;height:16px;border-radius:50%;flex-shrink:0;
   background:linear-gradient(135deg,#2F4E6E 0%,#6BA7A1 100%);
-  -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 2px),#000 calc(100% - 2px));
-  mask:radial-gradient(farthest-side,transparent calc(100% - 2px),#000 calc(100% - 2px));
+  display:flex;align-items:center;justify-content:center;
+}
+.ring-completed::after{
+  content:"";
+  width:11px;height:11px;border-radius:50%;
+  background:var(--surface);
 }
 .filter-row{display:flex;gap:8px;padding:0 16px 14px;overflow-x:auto;-webkit-overflow-scrolling:touch}
 .filter-row::-webkit-scrollbar{display:none}
@@ -1493,7 +1496,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="28" height="28" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.10</span>
+          <span className="s-val">v15.11</span>
         </div>
       </div>
     </div>
