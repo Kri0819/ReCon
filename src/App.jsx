@@ -570,8 +570,12 @@ function TrackingPlanEditor({ plans, setPlans, methods }){
 function LogModal({ case_:c, methods, onClose, onSave }){
   const safe = methods.length>0?methods:["電話"];
   const plans = c.trackingPlans||[];
+  const nowH = new Date();
+  const defaultTime = `${String(nowH.getHours()).padStart(2,"0")}:${String(nowH.getMinutes()).padStart(2,"0")}`;
   const [method, setMethod] = useState(safe[0]);
   const [planId, setPlanId] = useState(plans[0]?.id||null);
+  const [date,   setDate]   = useState(TODAY);
+  const [time,   setTime]   = useState(defaultTime);
   const [note,   setNote]   = useState("");
 
   function onMethodChange(m){
@@ -583,7 +587,7 @@ function LogModal({ case_:c, methods, onClose, onSave }){
     <div className="overlay center" onClick={onClose}>
       <div className="sheet center" onClick={e=>e.stopPropagation()}>
         <div className="sheet-title">記錄聯絡</div>
-        <div className="sheet-sub" style={{marginBottom:16}}>{c.nick} · {TODAY}</div>
+        <div className="sheet-sub" style={{marginBottom:16}}>{c.nick}</div>
 
         {plans.length>0&&(
           <>
@@ -615,11 +619,16 @@ function LogModal({ case_:c, methods, onClose, onSave }){
         <select className="inp" value={method} onChange={e=>onMethodChange(e.target.value)}>
           {safe.map(m=><option key={m} value={m}>{m}</option>)}
         </select>
+        <label className="inp-label">日期與時間</label>
+        <div style={{display:"flex",gap:8,marginBottom:14}}>
+          <input type="date" className="inp" style={{flex:1,marginBottom:0}} value={date} max={TODAY} onChange={e=>setDate(e.target.value)}/>
+          <input type="time" className="inp" style={{flex:1,marginBottom:0}} value={time} onChange={e=>setTime(e.target.value)}/>
+        </div>
         <label className="inp-label">備註（選填）</label>
         <input className="inp" placeholder="一兩句即可…" value={note} onChange={e=>setNote(e.target.value)} maxLength={120}/>
         <div className="btn-row">
           <button className="act-btn" onClick={onClose}>取消</button>
-          <button className="act-btn primary" onClick={()=>{onSave(c.id,method,note.trim(),planId);onClose();}}>儲存</button>
+          <button className="act-btn primary" onClick={()=>{onSave(c.id,method,note.trim(),planId,date,time);onClose();}}>儲存</button>
         </div>
       </div>
     </div>
@@ -781,16 +790,17 @@ function HomeScreen({ cases, methods, levels, updateCase, showToast }){
       return order2(a._status)-order2(b._status);
     });
 
-  function handleLogSave(id, method, note, planId){
+  function handleLogSave(id, method, note, planId, date, time){
+    const logDate = date || TODAY;
     updateCase(id, prev=>{
-      const newLog = {date:TODAY, method, note:note||"已聯絡", planId:planId||undefined};
-      const newLogs = [newLog, ...(prev.logs||[])];
-      // Update nextDue for the matched plan
+      const newLog = {date:logDate, time:time||"", method, note:note||"已聯絡", planId:planId||undefined};
+      const newLogs = [newLog, ...(prev.logs||[])].sort((a,b)=>b.date.localeCompare(a.date)||(b.time||"").localeCompare(a.time||""));
+      // Update nextDue for the matched plan (based on the recorded date, not necessarily today)
       const newPlans = (prev.trackingPlans||[]).map(p=>{
         if(p.id!==planId) return p;
-        return {...p, nextDue:calcPlanNextDue(p, TODAY)};
+        return {...p, nextDue:calcPlanNextDue(p, logDate)};
       });
-      return {lastContact:TODAY, trackingPlans:newPlans, logs:newLogs};
+      return {lastContact: logDate>prev.lastContact||!prev.lastContact ? logDate : prev.lastContact, trackingPlans:newPlans, logs:newLogs};
     });
     showToast("已記錄");
   }
@@ -1007,14 +1017,16 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
   const monthVisitDone = (c.logs||[]).some(l=>l.date?.startsWith(thisMonth)&&(l.method==="訪視"||l.method==="家訪"));
   const hasMonthVisit = monthVisitDone;
 
-  function handleLogSave(id, method, note, planId){
+  function handleLogSave(id, method, note, planId, date, time){
+    const logDate = date || TODAY;
     updateCase(id, prev=>{
-      const newLog={date:TODAY,method,note:note||"已聯絡",planId:planId||undefined};
+      const newLog={date:logDate,time:time||"",method,note:note||"已聯絡",planId:planId||undefined};
       const newPlans=(prev.trackingPlans||[]).map(p=>{
         if(p.id!==planId) return p;
-        return {...p,nextDue:calcPlanNextDue(p,TODAY)};
+        return {...p,nextDue:calcPlanNextDue(p,logDate)};
       });
-      return{lastContact:TODAY,trackingPlans:newPlans,logs:[newLog,...(prev.logs||[])]};
+      const newLogs=[newLog,...(prev.logs||[])].sort((a,b)=>b.date.localeCompare(a.date)||(b.time||"").localeCompare(a.time||""));
+      return{lastContact: logDate>prev.lastContact||!prev.lastContact ? logDate : prev.lastContact, trackingPlans:newPlans, logs:newLogs};
     });
     showToast("已記錄");
   }
@@ -1109,7 +1121,7 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
             <div className="log-line"/>
             <div className="log-body" style={{flex:1}}>
               <div className="log-date">
-                {log.date} · <span style={{background:"var(--surface2)",padding:"1px 7px",borderRadius:4,fontSize:11}}>{log.method}</span>
+                {log.date}{log.time?` ${log.time}`:""} · <span style={{background:"var(--surface2)",padding:"1px 7px",borderRadius:4,fontSize:11}}>{log.method}</span>
                 {log.planId&&(()=>{const p=c.trackingPlans?.find(p=>p.id===log.planId);return p?<span style={{marginLeft:4,fontSize:10,color:"var(--accent-mid)"}}>{p.name||p.method}</span>:null;})()}
               </div>
               <div className="log-note" style={{marginTop:3}}>{log.note}</div>
@@ -1515,7 +1527,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.14</span>
+          <span className="s-val">v15.15</span>
         </div>
       </div>
     </div>
