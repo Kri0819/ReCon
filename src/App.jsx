@@ -1,873 +1,998 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 
-// ─── v0.9.12 ───────────────────────────────────────────────────────
-// 週視圖展開：移至列內、無框、字體放大、時間縮排、箭頭改▾/▴
-// Settings: remove emoji icons, restore clean border rows
-//   components/TimelineBar.jsx  — pure timeline bar display
-//   components/WeekView.jsx     — week grid display + day-click
-//   components/DayView.jsx      — day timeline with drag/resize
-//   components/ShareSheet.jsx   — share bottom sheet UI
-//   services/calendarSync.js    — Google Calendar sync (unchanged)
-// App.jsx retains: state, navigation, data loading, settings, modals
-// UI / functionality / data flow: zero changes
-// Events: add date field (YYYY-MM-DD), save on create/edit
-// WeekView + ShareSheet: read real events grouped by date (no more mock week data)
-
-// ─── Status definitions ────────────────────────────────────────────
-// ─── Status config ─────────────────────────────────────────────────
-// In multi-file project: import { STATUS, STATUS_KEYS, PRIORITY, STATUS_HINTS, guessStatus } from './statusConfig.js'
-// Inline below for single-file build compatibility.
-const STATUS = {
-  busy:    { color: "#C98D86", label: "忙碌",      bg: "#C98D8614", barColor: "#C98D86", emoji: "🔴" },
-  urgent:  { color: "#D6B183", label: "急事可聯繫", bg: "#D6B18314", barColor: "#D6B183", emoji: "🟠" },
-  reply:   { color: "#C8BE97", label: "可回訊息",  bg: "#C8BE9714", barColor: "#C8BE97", emoji: "🟡" },
-  free:    { color: "#8FA89D", label: "空閒",      bg: "#8FA89D14", barColor: "#8FA89D", emoji: "🟢" },
-  offline: { color: "#B5AEA7", label: "休息中",    bg: "#B5AEA714", barColor: "#B5AEA7", emoji: "🌙" },
-};
-const STATUS_KEYS = ["busy", "urgent", "reply", "free", "offline"];
-const PRIORITY    = { busy: 5, urgent: 4, reply: 3, free: 2, offline: 1 };
-const STATUS_HINTS = { busy: "", urgent: "", reply: "", free: "", offline: "" };
-
-// ─── Keyword rules (import-time recommendations only) ──────────────
-const DEFAULT_RULES = [
-  { id: 1, keyword: "訪視",       status: "busy"   },
-  { id: 2, keyword: "開會",       status: "busy"   },
-  { id: 3, keyword: "會議",       status: "busy"   },
-  { id: 4, keyword: "Meeting",    status: "busy"   },
-  { id: 5, keyword: "看診",       status: "busy"   },
-  { id: 6, keyword: "寫個案紀錄", status: "reply"  },
-  { id: 7, keyword: "自由時間",   status: "free"   },
-  { id: 8, keyword: "Free",       status: "free"   },
-];
-
-// guessStatus — extracted to statusConfig.js
-// In multi-file: imported from statusConfig.js
-function guessStatus(title) {
-  for (const rule of DEFAULT_RULES) {
-    if (title.includes(rule.keyword)) return rule.status;
-  }
-  return "busy"; // conservative default
+// ─────────────────────────────────────────────────────────────────────────────
+// CSS
+// ─────────────────────────────────────────────────────────────────────────────
+const css = `
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;400;500&family=Inter:wght@300;400;500;600&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#F8F7F4;--surface:#FFFFFF;--surface2:#F4F3F0;
+  --border:#E8E6E0;--border2:#D4D1CA;
+  --text:#1E1C18;--text2:#3C3A34;--muted:#928F86;--faint:#C8C5BC;
+  --red:#C0392B;--red-bg:#FDF0EF;
+  --yellow:#B8860B;--yellow-bg:#FDF8EC;
+  --green:#2D6A4F;--green-bg:#EDF5F1;
+  --accent:#2C4A7C;--accent-lt:#EBF0F9;--accent-mid:#4A6FA0;
+  --serif:'Noto Serif TC',serif;--sans:'Inter',system-ui,sans-serif;--r:12px;
 }
-
-// ─── Seed events ───────────────────────────────────────────────────
-const TODAY = new Date();
-function todayAt(h, m = 0) {
-  const d = new Date(TODAY);
-  d.setHours(h, m, 0, 0);
-  return d.toISOString();
+[data-theme="dark"]{
+  --bg:#111827;--surface:#1E2A3A;--surface2:#162030;
+  --border:#243044;--border2:#2E3D54;
+  --text:#EEF2F7;--text2:#C8D4E4;--muted:#7A90AA;--faint:#3A4F68;
+  --red:#E05555;--red-bg:#2A1A1A;
+  --yellow:#D4A020;--yellow-bg:#241C08;
+  --green:#4A9B6F;--green-bg:#0E2018;
+  --accent:#6B9FD4;--accent-lt:#1A2D44;--accent-mid:#5A8AB8;
 }
-
-// Returns YYYY-MM-DD for any date object
-function dateStr(d = new Date()) { return d.toISOString().slice(0, 10); }
-
-let _nextId = 10;
-function newId() { return String(++_nextId); }
-
-const SEED_EVENTS = [
-  { id: "1", date: dateStr(), title: "個案紀錄", startTime: todayAt(9),  endTime: todayAt(12), note: "", status: "reply" },
-  { id: "2", date: dateStr(), title: "午休",     startTime: todayAt(12), endTime: todayAt(13), note: "", status: "free"  },
-  { id: "3", date: dateStr(), title: "社區訪視", startTime: todayAt(13), endTime: todayAt(17), note: "", status: "busy"  },
-  { id: "4", date: dateStr(), title: "個人時間", startTime: todayAt(18), endTime: todayAt(22), note: "", status: "free"  },
-];
-
-// ─── Status engine ─────────────────────────────────────────────────
-// Events have explicit status — no keyword inference at render time
-function buildBlocks(events) {
-  const hourSlots = Array.from({ length: 24 }, (_, h) => {
-    let status = "offline";
-    for (const ev of events) {
-      const s = new Date(ev.startTime).getHours();
-      const e = new Date(ev.endTime).getHours();
-      if (h >= s && h < e) {
-        if (PRIORITY[ev.status] > PRIORITY[status]) status = ev.status;
-      }
-    }
-    return { hour: h, status };
-  });
-  const merged = [];
-  for (const slot of hourSlots) {
-    const last = merged[merged.length - 1];
-    if (last && last.status === slot.status) { last.end = slot.hour + 1; }
-    else merged.push({ start: slot.hour, end: slot.hour + 1, status: slot.status });
-  }
-  return merged;
+html,body{height:100%;background:var(--bg);font-family:var(--sans);font-size:14px;line-height:1.55;color:var(--text);-webkit-font-smoothing:antialiased}
+.shell{width:100%;min-height:100dvh;max-width:430px;margin:0 auto;background:var(--bg);display:flex;flex-direction:column;position:relative}
+.screen{flex:1;overflow-y:auto;overflow-x:hidden}
+.screen::-webkit-scrollbar{display:none}
+.screen-pad{padding-bottom:24px}
+.bnav{display:flex;background:rgba(255,255,255,.94);border-top:1px solid var(--border);padding:10px 0 calc(env(safe-area-inset-bottom,0px) + 14px);flex-shrink:0;backdrop-filter:blur(12px)}
+.bnav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;border:none;background:none;cursor:pointer;padding:4px 0;font-family:var(--sans)}
+.bnav-icon{font-size:19px;opacity:.3;transition:opacity .12s}
+.bnav-label{font-size:10px;letter-spacing:.04em;color:var(--muted);font-weight:500}
+.bnav-btn.active .bnav-icon{opacity:1}
+.bnav-btn.active .bnav-label{color:var(--accent);font-weight:600}
+.ph{padding:calc(env(safe-area-inset-top,0px) + 20px) 22px 18px;display:flex;align-items:flex-end;justify-content:space-between;background:var(--bg)}
+.ph-eyebrow{font-family:var(--serif);font-size:11px;font-weight:300;letter-spacing:.08em;color:var(--muted);margin-bottom:2px}
+.ph-title{font-family:var(--serif);font-size:22px;font-weight:400;letter-spacing:-.01em;color:var(--text);line-height:1.2}
+.ph-sub{font-size:12px;color:var(--muted);font-weight:400}
+.ph-action{font-size:16px;color:var(--accent);font-weight:500;cursor:pointer;border:none;background:none;font-family:var(--sans);padding:8px 12px 8px 4px;min-height:44px;-webkit-tap-highlight-color:transparent}
+.spill{display:inline-flex;align-items:center;gap:5px;padding:2px 8px 2px 6px;border-radius:20px;font-size:11px;font-weight:500;white-space:nowrap;flex-shrink:0}
+.spill .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.spill.red{background:var(--red-bg);color:var(--red)}.dot.red{background:var(--red)}
+.spill.yellow{background:var(--yellow-bg);color:var(--yellow)}.dot.yellow{background:var(--yellow)}
+.spill.green{background:var(--green-bg);color:var(--green)}.dot.green{background:var(--green)}
+.spill.faint{background:var(--surface2);color:var(--muted)}.dot.faint{background:var(--faint)}
+.lvl-badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.03em;white-space:nowrap;flex-shrink:0}
+.lvl-red{background:var(--red-bg);color:var(--red);border:1px solid #F5CECA}
+.lvl-yellow{background:var(--yellow-bg);color:var(--yellow);border:1px solid #EDD9A0}
+.lvl-green{background:var(--green-bg);color:var(--green);border:1px solid #A8D8BC}
+.lvl-faint{background:var(--surface2);color:var(--muted);border:1px solid var(--border)}
+/* Tracking progress */
+.plan-block{margin:0 16px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.plan-block-hd{padding:10px 14px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.plan-row{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:1px solid var(--border)}
+.plan-row:last-child{border-bottom:none}
+.plan-name{font-size:13px;font-weight:500}
+.plan-freq{font-size:11px;color:var(--muted);margin-top:1px}
+.plan-prog{font-size:12px;font-weight:600}
+.plan-prog.done{color:var(--green)}.plan-prog.todo{color:var(--yellow)}
+/* Card rows */
+.card-row{background:var(--surface);border-radius:var(--r);margin:0 22px 12px;padding:18px 18px;display:flex;align-items:center;gap:14px;cursor:pointer;border:1px solid var(--border);transition:box-shadow .12s,border-color .12s}
+.card-row:active{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-lt)}
+.row-main{flex:1;min-width:0}
+.row-nick{font-size:15px;font-weight:500;color:var(--text)}
+.row-meta{font-size:12px;color:var(--muted);margin-top:3px}
+.row-plans{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.row-plan-chip{font-size:10px;font-weight:500;padding:2px 7px;border-radius:10px;white-space:nowrap}
+.row-plan-chip.done{background:var(--green-bg);color:var(--green)}
+.row-plan-chip.todo{background:var(--yellow-bg);color:var(--yellow)}
+.row-plan-chip.idle{background:var(--surface2);color:var(--muted)}
+.sec-label{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:18px 22px 8px}
+.act-btn{font-size:12px;font-weight:500;font-family:var(--sans);padding:6px 14px;border-radius:8px;border:1px solid var(--border2);background:var(--surface);color:var(--text2);cursor:pointer;white-space:nowrap;transition:all .12s;letter-spacing:.01em}
+.act-btn:active{opacity:.75}
+.act-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.act-btn.danger{color:var(--red);border-color:#EDCFCC;background:var(--red-bg)}
+.act-btn:disabled{opacity:.3;cursor:default}
+.back-btn{display:flex;align-items:center;gap:6px;font-size:16px;color:var(--accent);font-weight:500;cursor:pointer;border:none;background:none;font-family:var(--sans);padding:8px 12px 8px 4px;min-height:44px;-webkit-tap-highlight-color:transparent}
+.det-title{font-family:var(--serif);font-size:20px;font-weight:400;margin-top:4px}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px 16px}
+.info-cell{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px}
+.info-cell.full{grid-column:1/-1}
+.info-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:4px}
+.info-val{font-size:14px;font-weight:500}
+.det-actions{display:flex;gap:10px;padding:4px 16px 16px}
+.det-actions .act-btn{flex:1;padding:11px 0;text-align:center;border-radius:10px;font-size:13px;font-weight:500}
+.log-item{display:flex;gap:14px;padding:12px 22px}
+.log-line{width:1px;background:var(--border);flex-shrink:0;margin-top:4px}
+.log-body{flex:1}
+.log-date{font-size:11px;color:var(--muted);margin-bottom:3px}
+.log-note{font-size:13px;color:var(--text2)}
+/* Calendar */
+.cal-wrap{margin:0 18px;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;background:var(--surface)}
+.cal-head{display:flex;border-bottom:1px solid var(--border)}
+.cal-th{flex:1;text-align:center;font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px 0 7px}
+.cal-body{display:grid;grid-template-columns:repeat(7,1fr)}
+.cal-td{overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);cursor:pointer;background:var(--surface);box-sizing:border-box;transition:background .1s;flex-shrink:0}
+.cal-td:nth-child(7n){border-right:none}
+.cal-td:nth-last-child(-n+7){border-bottom:none}
+.cal-td:active{background:var(--accent-lt)}
+.cal-td.empty{cursor:default;background:#ECEAE4;pointer-events:none}
+.cal-td.today-cell{background:var(--surface)}
+.cal-td.selected-cell{background:var(--accent-lt)}
+.cal-num{font-size:11px;font-weight:400;color:var(--text2);line-height:1;display:flex;align-items:center;justify-content:center;width:24px;height:24px;flex-shrink:0}
+.cal-td.today-cell .cal-num{background:var(--accent);color:#fff;border-radius:50%;font-weight:700;font-size:11px}
+.cal-dots{display:flex;gap:2px;justify-content:center;overflow:hidden;flex-shrink:0}
+.cal-dot{width:4px;height:4px;border-radius:50%;flex-shrink:0}
+.cal-nav{display:flex;align-items:center;justify-content:space-between;padding:16px 22px 12px}
+.cal-month{font-family:var(--serif);font-size:17px;font-weight:400;letter-spacing:-.01em}
+.cal-arrow{width:32px;height:32px;border-radius:50%;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;color:var(--muted);font-family:var(--sans);transition:all .1s}
+.cal-arrow:active{background:var(--accent-lt);color:var(--accent)}
+.day-panel{margin:12px 18px 0;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.day-panel-hd{padding:12px 16px;border-bottom:1px solid var(--border);font-family:var(--serif);font-size:13px;color:var(--muted)}
+.day-item{display:flex;align-items:center;gap:14px;padding:11px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s}
+.day-item:last-child{border-bottom:none}
+.day-item:active{background:var(--accent-lt)}
+.day-time{font-size:12px;color:var(--muted);width:36px;flex-shrink:0;font-weight:500}
+.day-nick{font-size:13px;font-weight:500;flex:1}
+.day-meth{font-size:11px;color:var(--muted);flex-shrink:0}
+/* Settings */
+.settings-group{margin:0 16px 4px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.settings-row{display:flex;align-items:center;justify-content:space-between;padding:15px 18px;border-bottom:1px solid var(--border);min-height:54px;cursor:pointer;transition:background .1s}
+.settings-row:last-child{border-bottom:none}
+.settings-row:active{background:var(--surface2)}
+.settings-row.static{cursor:default}
+.settings-row.static:active{background:var(--surface)}
+.s-label{font-size:14px;font-weight:400}
+.s-sub{font-size:12px;color:var(--muted);margin-top:1px}
+.s-val{font-size:13px;color:var(--muted)}
+.s-arrow{font-size:16px;color:var(--faint)}
+/* Modals */
+.overlay{position:absolute;inset:0;background:rgba(18,16,12,.48);display:flex;align-items:flex-end;z-index:100;animation:fi .15s;backdrop-filter:blur(3px)}
+.overlay.center{align-items:center;justify-content:center}
+.sheet{width:100%;background:var(--surface);border-radius:20px 20px 0 0;padding:14px 22px 40px;animation:su .22s cubic-bezier(.32,1.2,.45,1);max-height:88vh;overflow-y:auto}
+.sheet.center{width:calc(100% - 48px);max-width:360px;border-radius:20px;padding:24px 22px 22px;animation:fp .18s cubic-bezier(.32,1.2,.45,1);max-height:80vh}
+@keyframes fp{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}
+.sheet::-webkit-scrollbar{display:none}
+.sheet-handle{width:36px;height:4px;border-radius:2px;background:var(--border);margin:0 auto 20px}
+.sheet-title{font-family:var(--serif);font-size:18px;font-weight:400;margin-bottom:4px}
+.sheet-sub{font-size:12px;color:var(--muted);margin-bottom:20px;line-height:1.5}
+.inp{width:100%;border:1px solid var(--border);border-radius:10px;padding:11px 14px;font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);margin-bottom:14px;outline:none;transition:border-color .15s;-webkit-appearance:none;height:44px}
+.inp:focus{border-color:var(--accent)}
+select.inp{cursor:pointer;appearance:auto;height:44px}
+.inp-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:5px;display:block}
+.inp-hint{font-size:11px;color:var(--muted);margin-top:-10px;margin-bottom:14px}
+.inp-err{font-size:11px;color:var(--red);margin-top:-10px;margin-bottom:14px;font-weight:500}
+.opt-row{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+.opt{flex:1;min-width:52px;height:40px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:10px;font-size:12px;font-weight:500;font-family:var(--sans);background:var(--bg);color:var(--muted);cursor:pointer;transition:all .12s}
+.opt.active{border-color:var(--accent);background:var(--accent-lt);color:var(--accent)}
+.step-bar{display:flex;gap:4px;margin-bottom:18px}
+.step-seg{height:2px;flex:1;border-radius:1px;background:var(--border);transition:background .2s}
+.step-seg.done{background:var(--accent)}
+.btn-row{display:flex;gap:10px;margin-top:6px}
+.btn-row .act-btn{flex:1;height:46px;display:flex;align-items:center;justify-content:center;border-radius:10px;font-size:14px}
+/* Task editor */
+.task-item{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;margin-bottom:8px}
+/* Swipe */
+.swipe-row{position:relative;overflow:hidden;margin:0 22px 12px;border-radius:var(--r)}
+.swipe-card{display:flex;align-items:center;gap:14px;padding:18px 18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);cursor:pointer;position:relative;z-index:1;transform:translateX(0);transition:transform .25s ease;user-select:none;-webkit-user-select:none}
+.swipe-card.swiped{transform:translateX(-148px)}
+.swipe-actions{position:absolute;right:0;top:0;bottom:0;width:148px;display:flex;border-radius:0 var(--r) var(--r) 0;overflow:hidden}
+.swipe-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:none;cursor:pointer;font-family:var(--sans);font-size:11px;font-weight:600}
+.swipe-btn:active{opacity:.8}
+.swipe-btn.sb-archive{background:var(--yellow-bg);color:var(--yellow);border-left:1px solid #EDD9A0}
+.swipe-btn.sb-delete{background:var(--red-bg);color:var(--red);border-left:1px solid #F5CECA}
+.swipe-btn-icon{font-size:17px;line-height:1}
+.del-confirm{padding:10px 14px;background:var(--red-bg);border:1px solid #F5CECA;border-top:none;border-radius:0 0 var(--r) var(--r)}
+/* Log pick modal */
+.plan-pick-row{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--border);cursor:pointer}
+.plan-pick-row:last-child{border-bottom:none}
+.plan-pick-row:active{opacity:.7}
+@keyframes fi{from{opacity:0}to{opacity:1}}
+@keyframes su{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.toast{position:absolute;bottom:88px;left:50%;transform:translateX(-50%);background:rgba(18,16,12,.88);color:#fff;font-size:12px;font-weight:500;padding:9px 18px;border-radius:20px;z-index:200;white-space:nowrap;pointer-events:none;letter-spacing:.01em;animation:tin .18s ease,tout .28s ease 1.5s forwards}
+@keyframes tin{from{opacity:0;transform:translateX(-50%) translateY(6px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+@keyframes tout{from{opacity:1}to{opacity:0}}
+.ring-uncompleted{
+  width:16px;height:16px;border-radius:50%;flex-shrink:0;
+  border:2px dashed #ABA690;background:transparent;
 }
-
-function buildHourMap(blocks) {
-  const m = {};
-  for (const b of blocks) for (let h = b.start; h < b.end; h++) m[h] = b.status;
-  return m;
+.ring-completed{
+  width:16px;height:16px;border-radius:50%;flex-shrink:0;
+  background:linear-gradient(135deg,#2F4E6E 0%,#6BA7A1 100%);
+  display:flex;align-items:center;justify-content:center;
 }
-
-function fmt(h) { return `${String(h).padStart(2,"0")}:00`; }
-function fmtTime(iso) {
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+.ring-completed::after{
+  content:"";
+  width:11px;height:11px;border-radius:50%;
+  background:var(--surface);
 }
-function fmtDateLabel(d = new Date()) {
-  return d.toLocaleDateString("zh-TW", { weekday:"long", month:"long", day:"numeric" });
+.level-circle{
+  width:40px;height:40px;border-radius:50%;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:700;
+  padding:2px;text-align:center;line-height:1.1;
+  overflow:hidden;
 }
-
-const SHARE_URL = "https://canwe.app/u/demo";
-
-// ─── Week date helpers ─────────────────────────────────────────────
-function getWeekBounds() {
-  const today = new Date();
-  const dow   = today.getDay(); // 0=Sun
-  const mon   = new Date(today); mon.setDate(today.getDate() - ((dow + 6) % 7));
-  const sun   = new Date(mon);  sun.setDate(mon.getDate() + 6);
-  const year  = today.getFullYear();
-  // ISO week number
-  const tmp = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
-  tmp.setUTCDate(tmp.getUTCDate() + 4 - (tmp.getUTCDay() || 7));
-  const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
-  const weekNum   = Math.ceil((((tmp - yearStart) / 86400000) + 1) / 7);
-  const fmtMD = (d) => d.toLocaleDateString("zh-TW", { month:"numeric", day:"numeric" });
-  const range = `${fmtMD(mon)} – ${fmtMD(sun)}`;
-  return { year, weekNum, range, mon, sun };
-}
-function getWeekHeader() {
-  const { year, weekNum, range } = getWeekBounds();
-  return `${year} 年 第 ${weekNum} 週｜${range}`;
-}
-
-const WEEK_DAYS_BASE = ["一","二","三","四","五","六","日"];
-// Returns 7-element array starting from weekStart (0=Mon..6=Sun)
-function getWeekDays(weekStart = 0) {
-  return Array.from({length:7}, (_,i) => WEEK_DAYS_BASE[(weekStart + i) % 7]);
-}
-// Keep WEEK_DAYS for backwards compat (default Mon-start)
-const WEEK_DAYS = WEEK_DAYS_BASE;
-// Build array of 7 event-arrays for the current week from real events.
-// weekStart: 0=Mon, 1=Tue, ..., 6=Sun (matches WEEK_DAYS index)
-function buildWeekEvents(events, weekStart = 0) {
-  const today = new Date();
-  // dow: 0=Mon..6=Sun
-  const dow = (today.getDay() + 6) % 7;
-  // How many days back to reach the weekStart day
-  let offset = dow - weekStart;
-  if (offset < 0) offset += 7;
-  const startOffset = -offset;
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(today);
-    d.setDate(today.getDate() + startOffset + i);
-    const ds = dateStr(d);
-    return events.filter(ev => ev.date === ds);
-  });
-}
-
-// ─── CSS ───────────────────────────────────────────────────────────
-const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Noto+Serif+TC:wght@400;500;600&display=swap');
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-:root {
-  --bg:       #F6F3EE;
-  --surface:  #FFFFFF;
-  --surface2: #F0ECE6;
-  --border:   rgba(58,52,46,0.09);
-  --border2:  rgba(58,52,46,0.16);
-  --text:     #3A342E;
-  --muted:    #8A8078;
-  --muted2:   #B0A89E;
-  --accent:   #7C6F62;
-  --radius:   12px;
-  --font-d:   'DM Serif Display', Georgia, serif;
-  --font-b:   'Noto Serif TC', 'Hiragino Mincho ProN', Georgia, serif;
-  --c-busy:    #C98D86;
-  --c-urgent:  #D6B183;
-  --c-reply:   #C8BE97;
-  --c-free:    #8FA89D;
-  --c-offline: #B5AEA7;
-}
-html, body {
-  background: var(--bg); color: var(--text); font-family: var(--font-b);
-  font-size: 15px; line-height: 1.6; -webkit-font-smoothing: antialiased;
-}
-
-/* ── Loading ── */
-.ls {
-  position: fixed; inset: 0; background: var(--bg); z-index: 200;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
-  transition: opacity 0.55s ease, visibility 0.55s ease;
-}
-.ls.hidden { opacity: 0; visibility: hidden; }
-.ls-title {
-  font-family: var(--font-d); font-style: italic;
-  font-size: clamp(3rem, 11vw, 6rem); letter-spacing: -1.5px; line-height: 1;
-  animation: su 0.8s cubic-bezier(0.16,1,0.3,1) both;
-}
-.ls-sub {
-  font-size: 0.8rem; font-weight: 400; letter-spacing: 0.18em; color: var(--muted);
-  animation: su 0.8s cubic-bezier(0.16,1,0.3,1) 0.15s both;
-}
-.ls-pip {
-  width: 4px; height: 4px; border-radius: 50%; background: var(--c-free);
-  animation: su 0.8s cubic-bezier(0.16,1,0.3,1) 0.28s both, blink 1.4s ease-in-out 0.7s infinite;
-}
-@keyframes su    { from { opacity:0; transform:translateY(16px) } to { opacity:1; transform:none } }
-@keyframes blink { 0%,100% { opacity:.2 } 50% { opacity:.8 } }
-
-/* ── Shell ── */
-.app {
-  max-width: 460px; margin: 0 auto; min-height: 100dvh;
-  display: flex; flex-direction: column; padding-bottom: 64px;
-}
-
-/* ── Bottom Nav ── */
-.bnav {
-  position: fixed; bottom: 0; left: 0; right: 0;
-  width: 100%;
-  display: flex; background: rgba(246,243,238,0.96);
-  border-top: 1px solid var(--border);
-  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
-  z-index: 100;
-}
-.bnav-tab {
-  flex: 1; border: none; background: none; cursor: pointer;
-  padding: 14px 4px 18px; display: flex; flex-direction: column; align-items: center; gap: 4px;
-  font-family: var(--font-b); font-size: 0.7rem; font-weight: 400;
-  color: var(--muted2); transition: color 0.16s;
-}
-.bnav-tab.on { color: var(--text); }
-.bnav-tab svg { width: 24px; height: 24px; stroke-width: 1.5; }
-
-/* ── Page header ── */
-.page-header {
-  padding: 20px 22px 0;
-  font-family: var(--font-d); font-style: italic; font-size: 1.5rem;
-  letter-spacing: -0.5px; color: var(--text);
-}
-.page-date { font-family: var(--font-b); font-size: 0.72rem; font-weight: 400; color: var(--muted); margin-top: 2px; }
-
-/* ── Page ── */
-.page { flex: 1; padding: 20px 22px 32px; display: flex; flex-direction: column; gap: 18px; }
-
-/* ── Cards ── */
-.card {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 20px 22px;
-  animation: fi 0.38s ease both;
-}
-.card + .card, .card ~ * { animation-delay: 0.06s; }
-@keyframes fi { from { opacity:0; transform:translateY(5px) } to { opacity:1; transform:none } }
-.card-label {
-  font-family: var(--font-b); font-size: 0.66rem; font-weight: 400;
-  letter-spacing: 0.16em; text-transform: uppercase;
-  color: var(--muted2); margin-bottom: 14px;
-}
-
-/* ── Status pip ── */
-.pip {
-  border-radius: 50%; flex-shrink: 0; display: inline-block;
-}
-.pip-sm  { width: 8px;  height: 8px;  }
-.pip-md  { width: 11px; height: 11px; }
-.pip-lg  { width: 14px; height: 14px; }
-.pip.free    { background: var(--c-free);    box-shadow: 0 0 8px #8FA89D48; animation: breathe 2.6s ease-in-out infinite; }
-.pip.busy    { background: var(--c-busy);    box-shadow: 0 0 5px #C98D8630; }
-.pip.urgent  { background: var(--c-urgent);  box-shadow: 0 0 5px #D6B18330; }
-.pip.reply   { background: var(--c-reply);   box-shadow: 0 0 5px #C8BE9730; }
-.pip.offline { background: var(--c-offline); }
-@keyframes breathe { 0%,100%{box-shadow:0 0 4px #8FA89D28}50%{box-shadow:0 0 13px #8FA89D58} }
-
-/* ── Timeline bar ── */
-.tl-wrap { position: relative; }
-.tl-track {
-  position: relative; height: 16px; border-radius: 5px; overflow: hidden;
-  background: var(--surface2);
-}
-.tl-seg { position: absolute; top: 0; bottom: 0; transition: filter 0.18s; }
-.tl-seg:hover { filter: brightness(0.9); }
-.tl-labels { display: flex; justify-content: space-between; margin-top: 6px; }
-.tl-lbl { font-family: var(--font-b); font-size: 0.58rem; color: var(--muted2); }
-
-/* ── Buttons ── */
-.btn-row { display: flex; gap: 10px; }
-.btn {
-  flex: 1; padding: 12px 10px; border: none; border-radius: 10px; cursor: pointer;
-  font-family: var(--font-b); font-size: 0.85rem; font-weight: 500;
-  display: flex; align-items: center; justify-content: center; gap: 7px;
-  transition: transform 0.13s, filter 0.13s;
-  letter-spacing: 0.02em;
-}
-.btn:active { transform: scale(0.97); }
-.btn-p { background: var(--text); color: var(--bg); }
-.btn-p:hover { filter: brightness(1.1); }
-.btn-g { background: var(--surface2); color: var(--text); border: 1px solid var(--border2); }
-.btn-g:hover { border-color: rgba(58,52,46,0.28); }
-.btn-outline { flex: none; padding: 8px 14px; background: none; border: 1px solid var(--border2); color: var(--text); border-radius: 9px; font-size: 0.8rem; font-family: var(--font-b); cursor: pointer; transition: border-color 0.15s; }
-.btn-outline:hover { border-color: var(--accent); }
-.btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
-/* ── Events page ── */
-.ev-section-label {
-  font-family: var(--font-b); font-size: 0.66rem; letter-spacing: 0.16em;
-  text-transform: uppercase; color: var(--muted2); padding: 0 2px; margin-bottom: 8px;
-}
-.ev-list { display: flex; flex-direction: column; gap: 8px; }
-.ev-item {
-  display: flex; align-items: stretch; gap: 0;
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); overflow: hidden;
-  cursor: pointer; transition: border-color 0.15s;
-}
-.ev-item:hover { border-color: var(--border2); }
-.ev-stripe { width: 4px; flex-shrink: 0; }
-.ev-body { flex: 1; padding: 13px 16px; display: flex; align-items: center; gap: 12px; }
-.ev-time { font-size: 0.73rem; color: var(--muted); min-width: 86px; letter-spacing: 0.02em; font-variant-numeric: tabular-nums; }
-.ev-title { flex: 1; font-size: 0.9rem; font-weight: 500; }
-.ev-status-badge {
-  font-size: 0.68rem; font-weight: 400; padding: 3px 8px;
-  border-radius: 99px; border: 1px solid; white-space: nowrap;
-}
-.ev-actions { display: flex; align-items: center; gap: 4px; padding-right: 10px; }
-.ev-action-btn {
-  background: none; border: none; cursor: pointer; padding: 6px;
-  color: var(--muted2); border-radius: 6px; font-size: 0.8rem;
-  transition: color 0.15s, background 0.15s;
-}
-.ev-action-btn:hover { color: var(--text); background: var(--surface2); }
-.ev-empty {
-  text-align: center; padding: 40px 20px;
-  font-size: 0.85rem; color: var(--muted2); line-height: 2;
-}
-
-/* ── Add/Edit event modal ── */
-.modal-backdrop {
-  position: fixed; inset: 0; background: rgba(58,52,46,0.28);
-  backdrop-filter: blur(4px); z-index: 150;
-  display: flex; align-items: flex-end; justify-content: center;
-  animation: bdin 0.22s ease both;
-}
-@keyframes bdin { from { opacity:0 } to { opacity:1 } }
-.modal {
-  background: var(--surface); border-radius: 18px 18px 0 0;
-  width: 100%; max-width: 100%; padding: 24px 22px 40px; box-sizing: border-box;
-  display: flex; flex-direction: column; gap: 18px;
-  animation: slideup 0.28s cubic-bezier(0.16,1,0.3,1) both;
-  max-height: 92dvh; overflow-y: auto;
-}
-@keyframes slideup { from { transform: translateY(100%) } to { transform: none } }
-.modal-title { font-family: var(--font-d); font-style: italic; font-size: 1.2rem; }
-.modal-drag { width: 36px; height: 4px; border-radius: 2px; background: var(--border2); margin: 0 auto -6px; }
-
-/* ── Form elements ── */
-.field { display: flex; flex-direction: column; gap: 6px; }
-.field-label { font-size: 0.72rem; letter-spacing: 0.12em; color: var(--muted); }
-.input {
-  background: var(--surface2); border: 1px solid var(--border2); border-radius: 9px;
-  color: var(--text); font-family: var(--font-b); font-size: 0.9rem; font-weight: 400;
-  padding: 11px 14px; outline: none; width: 100%;
-  transition: border-color 0.15s;
-}
-.input:focus { border-color: var(--accent); }
-.time-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; min-width: 0; }
-.time-row > * { min-width: 0; overflow: hidden; }
-input[type="time"].input { width: 100%; min-width: 0; appearance: none; -webkit-appearance: none; }
-
-/* ── Status picker in modal ── */
-.status-picker { display: flex; flex-direction: column; gap: 7px; }
-.status-option {
-  display: flex; align-items: center; gap: 12px;
-  padding: 11px 14px; border-radius: 10px; border: 1px solid var(--border);
-  cursor: pointer; transition: border-color 0.15s, background 0.15s;
-  background: var(--surface2);
-}
-.status-option:hover { border-color: var(--border2); }
-.status-option.selected { border-width: 1.5px; }
-.status-option-label { font-size: 0.88rem; font-weight: 500; flex: 1; }
-.status-option-hint { font-size: 0.72rem; color: var(--muted); }
-
-/* ── Share page ── */
-.sh-head { text-align: center; }
-.sh-title { font-family: var(--font-b); font-weight: 500; font-size: 1.15rem; letter-spacing: 0.02em; line-height: 1.5; }
-.sh-date  { font-size: 0.74rem; color: var(--muted); margin-top: 4px; letter-spacing: 0.06em; }
-.sh-tabs  { display: flex; background: var(--surface2); border-radius: 9px; padding: 3px; gap: 3px; }
-.sh-tab   {
-  flex: 1; padding: 8px; border: none; border-radius: 7px; cursor: pointer;
-  font-family: var(--font-b); font-size: 0.8rem; font-weight: 400;
-  background: none; color: var(--muted); transition: all 0.16s;
-}
-.sh-tab.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(58,52,46,0.08); }
-
-/* ── View toggle: rectangular segmented control ── */
-.view-toggle {
-  display: flex; background: var(--surface2); border-radius: 10px;
-  padding: 3px; gap: 3px; width: fit-content; align-self: center;
-}
-.view-toggle-btn {
-  padding: 6px 18px; border: none; background: none; cursor: pointer;
-  font-family: var(--font-b); font-size: 0.82rem; font-weight: 400;
-  color: var(--muted); border-radius: 8px; transition: all 0.16s; white-space: nowrap;
-}
-.view-toggle-btn.on {
-  background: var(--surface); color: var(--text); font-weight: 500;
-  box-shadow: 0 1px 4px rgba(58,52,46,0.10);
-}
-
-/* ── Date nav row ── */
-.date-nav-row {
-  display: flex; align-items: center; justify-content: center; gap: 16px;
-  padding: 6px 0;
-}
-.date-nav-btn {
-  background: none; border: none; cursor: pointer;
-  font-size: 1rem; color: var(--muted); padding: 4px 8px;
-  transition: color 0.15s;
-}
-.date-nav-btn:hover { color: var(--text); }
-.date-nav-label {
-  font-family: var(--font-b); font-size: 0.95rem; font-weight: 500;
-  color: var(--text); min-width: 130px; text-align: center;
-}
-
-/* ── Month view ── */
-.mv-grid {
-  display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;
-}
-.mv-day-hdr {
-  text-align: center; font-size: 0.65rem; color: var(--muted2); padding: 4px 0;
-  font-family: var(--font-b);
-}
-.mv-cell {
-  aspect-ratio: 1; display: flex; flex-direction: column;
-  align-items: center; justify-content: flex-start;
-  padding: 4px 2px; border-radius: 8px; cursor: pointer;
-  transition: background 0.14s; position: relative;
-}
-.mv-cell:hover { background: var(--surface2); }
-.mv-cell.today { background: var(--surface2); }
-.mv-cell.today .mv-date { background: var(--text); color: var(--bg); border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; }
-.mv-cell.other-month .mv-date { color: var(--muted2); }
-.mv-date { font-size: 0.78rem; font-family: var(--font-b); color: var(--text); width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; }
-.mv-dots { display: flex; gap: 2px; margin-top: 2px; flex-wrap: wrap; justify-content: center; }
-.mv-dot { width: 5px; height: 5px; border-radius: 50%; }
-.mv-selected { outline: 2px solid var(--accent); outline-offset: 1px; }
-.sh-blocks { display: flex; flex-direction: column; gap: 6px; }
-.sh-block {
-  display: flex; align-items: center; gap: 12px;
-  padding: 12px 16px; border-radius: 10px; border: 1px solid var(--border);
-}
-.sh-block-time { font-size: 0.75rem; color: var(--muted); width: 112px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
-.sh-block-lbl  { font-size: 0.88rem; font-weight: 500; }
-.legend { display: flex; flex-wrap: wrap; gap: 10px 20px; }
-.legend-item { display: flex; align-items: center; gap: 7px; font-size: 0.76rem; color: var(--muted); }
-.privacy-note {
-  font-size: 0.71rem; color: var(--muted2); text-align: center;
-  border: 1px solid var(--border); border-radius: 9px;
-  padding: 11px 16px; line-height: 1.8;
-}
-
-
-/* ── Settings ── */
-.sec-head { font-size: 0.68rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted2); margin-bottom: 10px; font-weight: 400; }
-.gcal-connected { display: flex; align-items: center; gap: 12px; background: #8FA89D12; border: 1px solid #8FA89D32; border-radius: 10px; padding: 13px 16px; }
-.gcal-connect-btn {
-  width: 100%; padding: 13px; border-radius: 10px; border: 1px dashed rgba(58,52,46,0.2); background: none;
-  color: var(--text); font-family: var(--font-b); font-size: 0.85rem; font-weight: 400; cursor: pointer;
-  display: flex; align-items: center; justify-content: center; gap: 9px; transition: border-color 0.18s, color 0.18s;
-}
-.gcal-connect-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
-.gcal-connect-btn:disabled { opacity: 0.55; cursor: wait; }
-.rule-row { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--border); }
-.rule-row:last-child { border-bottom: none; }
-.rule-kw  { flex: 1; font-size: 0.85rem; }
-.rule-arr { color: var(--muted2); font-size: 0.8rem; }
-.sel {
-  background: var(--surface2); border: 1px solid var(--border2); border-radius: 7px;
-  color: var(--text); font-family: var(--font-b); font-size: 0.78rem;
-  padding: 5px 8px; cursor: pointer; outline: none; appearance: auto;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-.spinner { width: 13px; height: 13px; border-radius: 50%; border: 2px solid rgba(58,52,46,0.15); border-top-color: var(--text); animation: spin 0.7s linear infinite; flex-shrink: 0; }
-
-/* ── Toast ── */
-.toast {
-  position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(60px);
-  background: var(--text); color: var(--bg); border-radius: 8px;
-  padding: 9px 22px; font-family: var(--font-b); font-size: 0.8rem; white-space: nowrap;
-  transition: transform 0.28s cubic-bezier(0.16,1,0.3,1); z-index: 50; pointer-events: none;
-  /* keep toast centered within viewport — acceptable for toast notifications */
-}
-.toast.show { transform: translateX(-50%) translateY(0); }
-/* ── Settings menu ── */
-.settings-menu { display: flex; flex-direction: column; gap: 8px; }
-.settings-row {
-  display: flex; align-items: center; gap: 14px;
-  padding: 14px 18px; background: var(--surface);
-  border: 1px solid var(--border); border-radius: var(--radius);
-  cursor: pointer; transition: border-color 0.15s;
-}
-.settings-row:hover { border-color: var(--border2); }
-.settings-row-body { flex: 1; }
-.settings-row-title { font-size: 0.9rem; font-weight: 500; }
-.settings-row-desc  { font-size: 0.73rem; color: var(--muted); margin-top: 2px; }
-.settings-row-arrow { color: var(--muted2); font-size: 0.85rem; }
-.settings-back {
-  display: flex; align-items: center; gap: 8px;
-  background: none; border: none; cursor: pointer;
-  font-family: var(--font-b); font-size: 0.82rem; color: var(--muted);
-  padding: 0; margin-bottom: 18px; transition: color 0.15s;
-}
-.settings-back:hover { color: var(--text); }
-
-/* ── Status editor ── */
-.status-editor-row { display: flex; align-items: flex-start; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--border); }
-.status-editor-row:last-child { border-bottom: none; }
-.status-color-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 8px; }
-.status-name-input { flex: 1; background: none; border: none; outline: none; font-family: var(--font-b); font-size: 0.9rem; font-weight: 500; color: var(--text); padding: 4px 0; border-bottom: 1px solid transparent; transition: border-color 0.15s; }
-.status-name-input:focus { border-bottom-color: var(--accent); }
-.status-desc-input { width: 100%; background: var(--surface2); border: 1px solid var(--border2); border-radius: 7px; font-family: var(--font-b); font-size: 0.78rem; color: var(--muted); padding: 6px 10px; outline: none; margin-top: 4px; transition: border-color 0.15s; }
-.status-desc-input:focus { border-color: var(--accent); }
-
-/* ── Time range picker ── */
-.time-range-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-.time-range-label { font-size: 0.82rem; font-weight: 500; min-width: 52px; }
-.time-range-select { background: var(--surface2); border: 1px solid var(--border2); border-radius: 8px; color: var(--text); font-family: var(--font-b); font-size: 0.85rem; padding: 8px 12px; cursor: pointer; outline: none; flex: 1; }
-
-/* ── Recurring schedule ── */
-.recur-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 11px 0; border-bottom: 1px solid var(--border);
-}
-.recur-row:last-child { border-bottom: none; }
-.recur-days { display: flex; gap: 5px; flex-wrap: wrap; }
-.recur-day-btn {
-  width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--border2);
-  background: var(--surface2); font-family: var(--font-b); font-size: 0.72rem;
-  cursor: pointer; display: flex; align-items: center; justify-content: center;
-  transition: all 0.14s; color: var(--muted); font-weight: 400;
-}
-.recur-day-btn.on { background: var(--text); color: var(--bg); border-color: var(--text); font-weight: 500; }
-.recur-time-row { display: flex; align-items: center; gap: 6px; font-size: 0.82rem; }
-.recur-time-sep { color: var(--muted2); }
-.recur-time-sel {
-  background: var(--surface2); border: 1px solid var(--border2); border-radius: 7px;
-  color: var(--text); font-family: var(--font-b); font-size: 0.8rem;
-  padding: 5px 8px; cursor: pointer; outline: none;
-}
-.recur-empty {
-  text-align: center; padding: 32px 16px;
-  font-size: 0.84rem; color: var(--muted2); line-height: 2;
-}
-.recur-tag {
-  display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px;
-}
-.recur-tag-chip {
-  font-size: 0.68rem; padding: 2px 8px; border-radius: 99px;
-  background: var(--surface2); color: var(--muted); border: 1px solid var(--border);
-}
-
-
-/* ── Share bottom sheet ── */
-.sh-sheet-backdrop { position: fixed; inset: 0; background: rgba(58,52,46,0.22); backdrop-filter: blur(3px); z-index: 150; animation: bdin 0.2s ease both; }
-@keyframes bdin { from { opacity:0 } to { opacity:1 } }
-.sh-sheet { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-radius: 20px 20px 0 0; padding: 20px 22px 44px; display: flex; flex-direction: column; gap: 16px; z-index: 151; animation: slideup 0.28s cubic-bezier(0.16,1,0.3,1) both; max-height: 88dvh; overflow-y: auto; }
-@keyframes slideup { from { transform: translateY(100%) } to { transform: none } }
-.sh-sheet-handle { width: 36px; height: 4px; border-radius: 2px; background: var(--border2); margin: 0 auto -4px; }
-.sh-sheet-title { font-family: var(--font-d); font-style: italic; font-size: 1.15rem; }
-.sh-preview { background: var(--surface2); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
-.sh-preview-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
-.sh-preview-row:last-child { border-bottom: none; }
-.sh-preview-time { font-size: 0.75rem; color: var(--muted); min-width: 100px; font-variant-numeric: tabular-nums; }
-.sh-preview-lbl  { font-size: 0.86rem; font-weight: 500; }
-
-/* ── Day view timeline ── */
-.dv-container { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 10px 0 8px; }
-.dv-wrap { position: relative; display: flex; padding-bottom: 16px; }
-.dv-time-col { width: 40px; flex-shrink: 0; position: relative; }
-.dv-hour-lbl { position: absolute; right: 8px; font-family: var(--font-b); font-size: 0.6rem; color: var(--muted2); font-variant-numeric: tabular-nums; transform: translateY(-50%); user-select: none; pointer-events: none; }
-.dv-col { flex: 1; position: relative; border-left: 1px solid var(--border); }
-.dv-gridline { position: absolute; left: 0; right: 0; border-top: 1px solid var(--border); pointer-events: none; }
-.dv-gridline.half { border-top-style: dashed; opacity: 0.5; }
-.dv-event { position: absolute; left: 6px; right: 6px; border-radius: 8px; border-left: 3px solid; padding: 5px 8px; cursor: pointer; display: flex; flex-direction: column; overflow: hidden; user-select: none; box-shadow: 0 1px 4px rgba(58,52,46,0.08); }
-.dv-event-title { font-family: var(--font-b); font-size: 0.78rem; font-weight: 500; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dv-event-time  { font-family: var(--font-b); font-size: 0.62rem; opacity: 0.75; margin-top: 2px; }
-.dv-resize { position: absolute; left: 0; right: 0; height: 10px; cursor: ns-resize; z-index: 5; }
-.dv-resize.top { top: 0; } .dv-resize.bottom { bottom: 0; }
-.dv-now-line { position: absolute; left: 0; right: 0; pointer-events: none; z-index: 6; }
-.dv-now-line::before { content: ''; display: block; height: 2px; background: var(--c-busy); opacity: 0.7; }
-.dv-now-dot { position: absolute; left: -4px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--c-busy); }
-
-/* ── FAB ── */
-.fab { position: fixed; bottom: 88px; right: 16px; width: 48px; height: 48px; border-radius: 50%; background: var(--text); color: var(--bg); border: none; cursor: pointer; font-size: 1.4rem; display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 12px rgba(58,52,46,0.22); transition: transform 0.15s, box-shadow 0.15s; z-index: 40; }
-.fab:hover { transform: scale(1.07); }
-.fab:active { transform: scale(0.95); }
-
-/* ── Onboarding overlay ── */
-.ob-overlay {
-  position: fixed; inset: 0; background: var(--bg); z-index: 200;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: 32px 28px; gap: 24px;
-  animation: fi 0.4s ease both;
-}
-.ob-title  { font-family: var(--font-d); font-style: italic; font-size: 2.2rem; letter-spacing: -1px; text-align: center; }
-.ob-sub    { font-size: 0.82rem; color: var(--muted); text-align: center; line-height: 1.7; letter-spacing: 0.04em; }
-.ob-card   { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; width: 100%; display: flex; flex-direction: column; gap: 16px; }
-.ob-label  { font-size: 0.78rem; font-weight: 500; color: var(--text); }
-.ob-select { background: var(--surface2); border: 1px solid var(--border2); border-radius: 9px; color: var(--text); font-family: var(--font-b); font-size: 0.92rem; padding: 10px 14px; outline: none; width: 100%; appearance: auto; cursor: pointer; }
-.ob-cross-note { font-size: 0.72rem; color: var(--muted); text-align: center; line-height: 1.6; }
+.level-circle.lc-long{font-size:10px;letter-spacing:-.02em;}
+.level-circle.lc-red{background:var(--red-bg);color:var(--red);border:1.5px solid #F5CECA}
+.level-circle.lc-yellow{background:var(--yellow-bg);color:var(--yellow);border:1.5px solid #EDD9A0}
+.level-circle.lc-green{background:var(--green-bg);color:var(--green);border:1.5px solid #A8D8BC}
+.level-circle.lc-faint{background:var(--surface2);color:var(--muted);border:1.5px solid var(--border)}
+.filter-row{display:flex;gap:8px;padding:0 16px 14px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.filter-row::-webkit-scrollbar{display:none}
+.filter-chip{flex-shrink:0;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:500;border:1px solid var(--border2);background:var(--surface);color:var(--text2);cursor:pointer;white-space:nowrap;transition:all .12s}
+.filter-chip.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.empty{padding:52px 24px;text-align:center;color:var(--muted);font-size:13px;line-height:1.8;font-family:var(--serif);font-weight:300}
 `;
 
-function injectCSS() {
-  if (document.getElementById("cw-css")) return;
-  const el = document.createElement("style");
-  el.id = "cw-css";
-  el.textContent = CSS;
-  document.head.appendChild(el);
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────────────────────────────────────
 
-// ─── Persistent storage helpers ───────────────────────────────────
-const RANGE_KEY = "canwe:displayRange";
-const ONBOARD_KEY = "canwe:onboarded";
+const INITIAL_METHODS = ["電話", "LINE", "訪視", "學校訪談"];
 
-async function loadRange() {
-  try {
-    const r = await window.storage.get(RANGE_KEY);
-    if (r?.value) return JSON.parse(r.value);
-  } catch (_) {}
-  return null;
-}
-async function saveRange(range) {
-  try { await window.storage.set(RANGE_KEY, JSON.stringify(range)); } catch (_) {}
-}
-async function loadOnboarded() {
-  try {
-    const r = await window.storage.get(ONBOARD_KEY);
-    return r?.value === "1";
-  } catch (_) { return false; }
-}
-async function saveOnboarded() {
-  try { await window.storage.set(ONBOARD_KEY, "1"); } catch (_) {}
-}
+const _d = new Date();
+const TODAY = `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,'0')}-${String(_d.getDate()).padStart(2,'0')}`;
+const _mn = ["一","二","三","四","五","六","七","八","九","十","十一","十二"];
+const _dn = {1:"一",2:"二",3:"三",4:"四",5:"五",6:"六",7:"七",8:"八",9:"九",10:"十",11:"十一",12:"十二",13:"十三",14:"十四",15:"十五",16:"十六",17:"十七",18:"十八",19:"十九",20:"二十",21:"二十一",22:"二十二",23:"二十三",24:"二十四",25:"二十五",26:"二十六",27:"二十七",28:"二十八",29:"二十九",30:"三十",31:"三十一"};
+const TODAY_DISPLAY = `${_mn[_d.getMonth()]}月 ${_dn[_d.getDate()]}日`;
 
-// Cross-day aware helpers for DayView
-// If start > end (e.g. 22→8), total = (24 - start) + end hours
-function rangeHours(start, end) {
-  return start <= end ? end - start : (24 - start) + end;
-}
-// Normalise a clock-hour into offset-minutes from rangeStart
-// Returns null if the hour is outside the range
-function hourToOffset(h, rangeStart, totalH) {
-  const crossDay = rangeStart > (rangeStart + totalH) % 24; // wraps midnight
-  let offset = h - rangeStart;
-  if (offset < 0) offset += 24;
-  if (offset > totalH) return null; // outside visible range
-  return offset;
-}
+const INITIAL_LEVELS = {
+  A:{ label:"A 級", days:7,  desc:"每週",     colorKey:"red"    },
+  B:{ label:"B 級", days:14, desc:"每兩週",   colorKey:"yellow" },
+  C:{ label:"C 級", days:30, desc:"每月",     colorKey:"green"  },
+  E:{ label:"緊急",  days:7,  desc:"每週",     colorKey:"red"    },
+};
 
-// ─── Onboarding component ─────────────────────────────────────────
-const HOUR_OPTS = Array.from({ length: 24 }, (_, i) => i);
+// Frequency definitions
+const FREQ_OPTIONS = [
+  {key:"weekly",    label:"每週",   days:7  },
+  {key:"biweekly",  label:"每兩週", days:14 },
+  {key:"monthly",   label:"每月",   days:30 },
+  {key:"quarterly", label:"每季",   days:90 },
+];
 
-function Onboarding({ onDone }) {
-  const [start, setStart] = useState(8);
-  const [end,   setEnd]   = useState(22);
+const DOW_NAMES = ["日","一","二","三","四","五","六"];
+const MONTH_NAMES = ["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"];
 
-  const isCrossDay = end <= start;
-  const hoursCount = isCrossDay ? (24 - start) + end : end - start;
-  const valid      = hoursCount >= 1 && hoursCount <= 23;
+const LOGO_LIGHT = "/logo-light.png";
+const LOGO_DARK  = "/logo-dark.png";
 
-  const confirm = async () => {
-    if (!valid) return;
-    const range = { start, end };
-    await saveRange(range);
-    await saveOnboarded();
-    onDone(range);
-  };
+const LS = { cases:"rc_cases5", methods:"rc_methods3", levels:"rc_levels3", theme:"rc_theme1" };
+const LS_DPLANS = "rc_default_plans3";
 
-  return (
-    <div className="ob-overlay">
-      <div className="ob-title">Can we…?</div>
-      <div className="ob-sub">
-        請先設定你的日常作息時間<br />
-        之後可以在設定裡修改
-      </div>
+const LEVEL_COLOR_OPTIONS = [
+  {key:"red",    label:"紅", bg:"#FDECEA", color:"#C0392B"},
+  {key:"yellow", label:"黃", bg:"#FDF8EE", color:"#B8860B"},
+  {key:"green",  label:"綠", bg:"#EDF5F1", color:"#2D6A4F"},
+];
 
-      <div className="ob-card">
-        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-          <div className="ob-label">我的一天從幾點開始？</div>
-          <select className="ob-select" value={start} onChange={e => setStart(Number(e.target.value))}>
-            {HOUR_OPTS.map(h => (
-              <option key={h} value={h}>{String(h).padStart(2,"0")}:00</option>
-            ))}
-          </select>
-        </div>
-        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-          <div className="ob-label">幾點結束？</div>
-          <select className="ob-select" value={end} onChange={e => setEnd(Number(e.target.value))}>
-            {HOUR_OPTS.map(h => (
-              <option key={h} value={h}>{String(h).padStart(2,"0")}:00</option>
-            ))}
-          </select>
-        </div>
-        <div style={{
-          fontSize:"0.78rem", color: isCrossDay ? "var(--c-reply)" : "var(--muted)",
-          textAlign:"center", padding:"6px 0",
-        }}>
-          {isCrossDay
-            ? `🌙 跨日模式：${String(start).padStart(2,"0")}:00 → 隔日 ${String(end).padStart(2,"0")}:00（共 ${hoursCount} 小時）`
-            : `共 ${hoursCount} 小時`}
-        </div>
-      </div>
-
-      <div className="ob-cross-note">
-        晚上上班的人可以選跨日時間<br />例如 22:00 → 08:00
-      </div>
-
-      <button className="btn btn-p" style={{ width:"100%", flex:"none" }}
-        onClick={confirm} disabled={!valid}>
-        開始使用
-      </button>
-    </div>
-  );
-}
-
-function Pip({ status, size = "md" }) {
-  return <span className={`pip pip-${size} ${status}`} />;
-}
-
-// ─── TimelineBar — extracted to components/TimelineBar.jsx ────────
-function TimelineBar({ blocks }) {
-  const TOTAL = 24;
-  return (
-    <div className="tl-wrap">
-      <div className="tl-track">
-        {blocks.map((b, i) => (
-          <div key={i} className="tl-seg"
-            style={{ left:`${(b.start/TOTAL)*100}%`, width:`${((b.end-b.start)/TOTAL)*100}%`, background: STATUS[b.status].barColor }}
-            title={`${fmt(b.start)}–${fmt(b.end)} · ${STATUS[b.status].label}`}
-          />
-        ))}
-      </div>
-      <div className="tl-labels">
-        {[0,6,12,18,24].map(h => <span key={h} className="tl-lbl">{String(h).padStart(2,"0")}</span>)}
-      </div>
-    </div>
-  );
-}
-
-const GRID_START = 0, GRID_END = 24;
-const GRID_HOURS = Array.from({ length: GRID_END - GRID_START }, (_,i) => i);
-
-// ─── Week summary helpers ─────────────────────────────────────────
-function getDaySummary(dayEvents, rangeStart, rangeEnd) {
-  const blocks = buildBlocks(dayEvents);
-  const visible = blocks.filter(b => b.end > rangeStart && b.start < rangeEnd);
-  let freeH = 0, busyH = 0, replyH = 0;
-  for (const b of visible) {
-    const h = Math.min(b.end, rangeEnd) - Math.max(b.start, rangeStart);
-    if (b.status === "free")   freeH  += h;
-    else if (b.status === "reply") replyH += h;
-    else if (b.status === "busy" || b.status === "urgent") busyH += h;
+// ─────────────────────────────────────────────────────────────────────────────
+// DATA MODEL
+// ─────────────────────────────────────────────────────────────────────────────
+/*
+  Case {
+    id, nick, note, level, archived, archivedAt, lastContact,
+    trackingPlans: [
+      {
+        id,           // unique string
+        name,         // display name e.g. "電話追蹤"
+        method,       // e.g. "電話"
+        freq,         // "weekly"|"biweekly"|"monthly"|"quarterly"
+        anchorDay,    // null | 1-31 (for monthly)
+        anchorDow,    // null | 0-6  (for weekly)
+        timesPerPeriod, // integer
+        nextDue,      // ISO date string — auto-calculated
+      }
+    ],
+    logs: [{ date, method, note, planId? }]
   }
-  const label =
-    freeH >= 5     ? `空閒 ${freeH}h` :
-    busyH >= 8     ? "幾乎全忙" :
-    freeH > 0      ? `空閒 ${freeH}h` :
-    replyH > 0     ? `可回訊息 ${replyH}h` : "休息中";
-  return { freeH, busyH, replyH, score: freeH * 3 + replyH * 2, label, blocks: visible };
+*/
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+function lsGet(key, fallback){
+  try{ const r=localStorage.getItem(key); if(!r)return fallback; const p=JSON.parse(r);
+    if(key===LS.cases&&!Array.isArray(p))return fallback;
+    if(key===LS.methods&&!Array.isArray(p))return fallback;
+    if(key===LS.levels&&(typeof p!=="object"||Array.isArray(p)))return fallback;
+    return p; }catch{ return fallback; }
+}
+function lsSet(key,val){ try{ localStorage.setItem(key,JSON.stringify(val)); }catch{} }
+
+function dateStr(d){ return d.toISOString().slice(0,10); }
+function addDays(s,n){ const d=new Date(s); d.setDate(d.getDate()+n); return dateStr(d); }
+function daysBetween(a,b){ if(!a||!b)return 0; const ms=new Date(b)-new Date(a); return isNaN(ms)?0:Math.round(ms/86400000); }
+function getMonthDays(y,m){ return{first:new Date(y,m,1).getDay(),total:new Date(y,m+1,0).getDate()}; }
+function ymd(y,m,d){ return `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`; }
+
+// Calculate next due date for a tracking plan after a completion date
+function calcPlanNextDue(plan, fromDate) {
+  const base = new Date(fromDate || TODAY);
+  const {freq, anchorDay, anchorDow} = plan;
+
+  if(freq==="weekly"){
+    if(anchorDow!=null){
+      // Next occurrence of that day of week
+      const d = new Date(base); d.setDate(d.getDate()+1); // at least tomorrow
+      while(d.getDay()!==anchorDow) d.setDate(d.getDate()+1);
+      return dateStr(d);
+    }
+    return addDays(fromDate||TODAY, 7);
+  }
+  if(freq==="biweekly") return addDays(fromDate||TODAY, 14);
+  if(freq==="quarterly") return addDays(fromDate||TODAY, 90);
+  // monthly
+  if(anchorDay){
+    let y=base.getFullYear(), m=base.getMonth()+1;
+    m+=1; if(m>12){m=1;y+=1;}
+    const last=new Date(y,m,0).getDate();
+    return `${y}-${String(m).padStart(2,"0")}-${String(Math.min(anchorDay,last)).padStart(2,"0")}`;
+  }
+  return addDays(fromDate||TODAY, 30);
 }
 
-// Rank days: best → good → ok → busy
-function getWeekRecommendations(weekEvents, rangeStart, rangeEnd) {
-  const summaries = weekEvents.map((evs, di) => {
-    const summary = getDaySummary(evs || [], rangeStart, rangeEnd);
-    return Object.assign({ di }, summary);
-  });
-  const best = summaries.filter(d => d.freeH  >= 4);
-  const good = summaries.filter(d => d.freeH  >= 1 && d.freeH < 4);
-  const ok   = summaries.filter(d => d.replyH >= 2 && d.freeH === 0);
-  const busy = summaries.filter(d => d.busyH  >= 6 && d.freeH === 0 && d.replyH === 0);
-  return { best, good, ok, busy };
+// Get period start for a plan (for counting completions)
+function getPeriodStart(freq){
+  const now=new Date(TODAY);
+  // 本週起點：當週週日
+  const weekStart=new Date(now); weekStart.setDate(now.getDate()-now.getDay());
+  if(freq==="weekly") return dateStr(weekStart);
+  if(freq==="biweekly"){
+    // 當週週日算第1天，往後算14天（即直接以本週週日為雙週起點）
+    return dateStr(weekStart);
+  }
+  if(freq==="quarterly"){
+    const m=now.getMonth(); const q=Math.floor(m/3)*3;
+    return `${now.getFullYear()}-${String(q+1).padStart(2,"0")}-01`;
+  }
+  return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`;
+}
+function getPeriodEnd(freq){
+  const s=new Date(getPeriodStart(freq));
+  if(freq==="weekly"){const e=new Date(s);e.setDate(s.getDate()+6);return dateStr(e);}
+  if(freq==="biweekly"){const e=new Date(s);e.setDate(s.getDate()+13);return dateStr(e);}
+  if(freq==="quarterly"){const e=new Date(s);e.setMonth(s.getMonth()+3);e.setDate(e.getDate()-1);return dateStr(e);}
+  const y=s.getFullYear(),m=s.getMonth(); return dateStr(new Date(y,m+1,0));
 }
 
-function WeekGrid({ weekEvents, rangeStart = 8, rangeEnd = 22, onDayClick, weekStart = 0, expandedDay = null, getExpandDate }) {
-  const today = new Date();
-  const todayDow = (today.getDay() + 6) % 7;
-  let todayIdx = todayDow - weekStart;
-  if (todayIdx < 0) todayIdx += 7;
-  const weekDays = getWeekDays(weekStart);
+function periodLabel(freq){
+  return {weekly:"本週", biweekly:"本兩週", monthly:"本月", quarterly:"本季"}[freq] || "本期";
+}
+function countPlanLogs(logs, plan){
+  const s=getPeriodStart(plan.freq), e=getPeriodEnd(plan.freq);
+  return (logs||[]).filter(l=>l.date>=s&&l.date<=e&&(l.planId===plan.id||l.method===plan.method)).length;
+}
+
+// Compute tracking status for a case
+function getTrackStatus(c){
+  const plans=c.trackingPlans||[];
+  if(!plans.length) return null;
+  const results=plans.map(p=>({
+    ...p,
+    done:countPlanLogs(c.logs,p),
+    goal:p.timesPerPeriod||1,
+    isDue: p.nextDue && p.nextDue<=TODAY,
+  }));
+  const allDone=results.every(r=>r.done>=r.goal);
+  const anyDue=results.some(r=>r.isDue&&r.done<r.goal);
+  return{results,allDone,anyDue};
+}
+
+// Derive case status from tracking plans
+function getCaseStatus(c){
+  if(c.archived) return "faint";
+  const ts=getTrackStatus(c);
+  if(ts){
+    if(ts.allDone) return "green";
+    if(ts.anyDue)  return "red";
+    // has plans but none due yet
+    const earliest=ts.results.filter(r=>r.done<r.goal&&r.nextDue).sort((a,b)=>a.nextDue>b.nextDue?1:-1)[0];
+    if(earliest){
+      const d=daysBetween(TODAY,earliest.nextDue);
+      if(d<=2) return "yellow";
+      return "faint";
+    }
+    return "green";
+  }
+  // legacy: no plans
+  const d=daysBetween(TODAY,c.lastContact);
+  return d>30?"red":d>14?"yellow":"faint";
+}
+
+function getCaseStatusLabel(c){
+  const ts=getTrackStatus(c);
+  if(ts){
+    if(ts.allDone) return "本期已完成";
+    const due=ts.results.filter(r=>r.isDue&&r.done<r.goal);
+    if(due.length) return `${due[0].name||due[0].method} 待完成`;
+    const next=ts.results.filter(r=>r.done<r.goal&&r.nextDue).sort((a,b)=>a.nextDue>b.nextDue?1:-1)[0];
+    if(next){ const d=daysBetween(TODAY,next.nextDue); return d===0?"今日到期":d===1?"明日":d>0?`${d} 天後`:"待完成"; }
+    return "追蹤中";
+  }
+  const d=daysBetween(TODAY,c.lastContact);
+  return d>30?`${d} 天未聯絡`:d>14?`${d} 天前`:"近期聯絡";
+}
+
+function generateId(cases){ const n=cases.map(c=>parseInt(c.id.replace("C",""),10)).filter(n=>!isNaN(n)); return `C${String(n.length?Math.max(...n)+1:1).padStart(3,"0")}`; }
+function genPlanId(){ return `tp${Date.now()}${Math.floor(Math.random()*1000)}`; }
+function order2(s){ return{red:0,yellow:1,green:2,faint:3}[s]; }
+
+function makeInitialCases(){
+  const ds=n=>{ const d=new Date(); d.setDate(d.getDate()+n); return dateStr(d); };
+  return [
+    { id:"C001", nick:"阿明", level:"A", note:"情緒起伏大，需定期關心",
+      archived:false, archivedAt:null, lastContact:ds(-14),
+      trackingPlans:[
+        {id:"tp1",name:"電話追蹤",method:"電話",freq:"monthly",anchorDay:null,anchorDow:null,timesPerPeriod:1,nextDue:TODAY},
+        {id:"tp2",name:"面訪",method:"訪視",freq:"monthly",anchorDay:null,anchorDow:null,timesPerPeriod:1,nextDue:ds(5)},
+      ],
+      logs:[{date:ds(-14),method:"電話",note:"情況穩定，已確認回診",planId:"tp1"},{date:ds(-21),method:"電話",note:"略顯低落，持續追蹤",planId:"tp1"}] },
+    { id:"C002", nick:"小芬", level:"E", note:"近期壓力大",
+      archived:false, archivedAt:null, lastContact:ds(-22),
+      trackingPlans:[
+        {id:"tp3",name:"LINE 關懷",method:"LINE",freq:"weekly",anchorDay:null,anchorDow:5,timesPerPeriod:1,nextDue:TODAY},
+      ],
+      logs:[{date:ds(-22),method:"LINE",note:"回覆慢，情況待觀察",planId:"tp3"}] },
+    { id:"C003", nick:"老王", level:"B", note:"",
+      archived:false, archivedAt:null, lastContact:ds(-10),
+      trackingPlans:[
+        {id:"tp4",name:"電話追蹤",method:"電話",freq:"biweekly",anchorDay:null,anchorDow:null,timesPerPeriod:1,nextDue:ds(4)},
+      ],
+      logs:[{date:ds(-10),method:"電話",note:"良好，下次兩週後",planId:"tp4"}] },
+    { id:"C004", nick:"淑惠", level:"C", note:"月底壓力較大",
+      archived:false, archivedAt:null, lastContact:ds(-45),
+      trackingPlans:[],
+      logs:[] },
+  ];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ATOMS
+// ─────────────────────────────────────────────────────────────────────────────
+
+function StatusPill({status,label}){ return <span className={`spill ${status}`}><span className={`dot ${status}`}/>{label}</span>; }
+
+function LevelBadge({levelKey,levels}){
+  const l=levels[levelKey]; if(!l) return null;
+  return <span className={`lvl-badge lvl-${l.colorKey||"faint"}`}>{l.label}</span>;
+}
+
+function Toast({msg}){ return <div className="toast">{msg}</div>; }
+function StepBar({total,current}){
+  return <div className="step-bar">{Array.from({length:total}).map((_,i)=><div key={i} className={`step-seg ${i<=current?"done":""}`}/>)}</div>;
+}
+
+// Inline plan chips for card rows
+function PlanChips({c}){
+  const ts=getTrackStatus(c);
+  if(!ts||!ts.results.length) return null;
+  // 只顯示聯絡方式名稱，不顯示進度數字
+  const methods=[...new Set(ts.results.map(r=>r.method))];
+  return (
+    <div className="row-plans">
+      {methods.map((m,i)=>(
+        <span key={i} className="row-plan-chip idle">{m}</span>
+      ))}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRACKING PLAN EDITOR
+// ─────────────────────────────────────────────────────────────────────────────
+
+function TrackingPlanEditor({ plans, setPlans, methods }){
+  const safe = methods.length>0?methods:["電話"];
+  const [adding, setAdding] = useState(false);
+  const [form, setForm]     = useState({name:"",method:safe[0],freq:"monthly",anchorDay:null,anchorDow:null,timesPerPeriod:1});
+
+  function add(){
+    if(!form.name.trim()&&!form.method) return;
+    const name = form.name.trim()||form.method;
+    const nextDue = calcPlanNextDue({...form}, TODAY);
+    setPlans(prev=>[...prev,{...form, id:genPlanId(), name, nextDue}]);
+    setAdding(false);
+    setForm({name:"",method:safe[0],freq:"monthly",anchorDay:null,anchorDow:null,timesPerPeriod:1});
+  }
+  function remove(id){ setPlans(prev=>prev.filter(p=>p.id!==id)); }
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-      {weekDays.map((day, di) => {
-        const sum     = getDaySummary(weekEvents[di] || [], rangeStart, rangeEnd);
-        const isToday = di === todayIdx;
-        const span    = rangeEnd - rangeStart;
-        const colDate = getExpandDate ? getExpandDate(di) : null;
-        const isExpanded = colDate && colDate === expandedDay;
+    <div style={{marginBottom:14}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+        <label className="inp-label" style={{margin:0}}>追蹤計畫</label>
+        <button className="act-btn" style={{fontSize:11,padding:"3px 10px"}} onClick={()=>setAdding(v=>!v)}>
+          {adding?"取消":"＋ 新增任務"}
+        </button>
+      </div>
 
-        return (
-          <div key={di}>
-            <div onClick={() => onDayClick && onDayClick(di)}
-              style={{
-                display:"flex", alignItems:"center", gap:12, padding:"10px 14px",
-                borderRadius: isExpanded ? "10px 10px 0 0" : 10,
-                cursor: onDayClick ? "pointer" : "default",
-                border:`1px solid ${isToday ? "var(--accent)" : "var(--border)"}`,
-                borderBottom: isExpanded ? "none" : undefined,
-                background: isToday ? "rgba(124,111,98,0.06)" : "var(--surface)",
-                transition:"border-color 0.15s",
-              }}>
-              <div style={{ width:28, flexShrink:0,
-                fontFamily:"var(--font-b)", fontSize:"0.82rem",
-                fontWeight: isToday ? 600 : 400,
-                color: isToday ? "var(--accent)" : "var(--text)" }}>
-                週{day}
-              </div>
-              <div style={{ flex:1, height:10, borderRadius:4, overflow:"hidden",
-                background:"var(--surface2)", position:"relative" }}>
-                {sum.blocks.map((b, i) => {
-                  const left  = ((Math.max(b.start, rangeStart) - rangeStart) / span) * 100;
-                  const width = ((Math.min(b.end, rangeEnd) - Math.max(b.start, rangeStart)) / span) * 100;
-                  return (
-                    <div key={i} style={{
-                      position:"absolute", top:0, bottom:0,
-                      left:`${left}%`, width:`${width}%`,
-                      background: STATUS[b.status].barColor,
-                    }} />
-                  );
-                })}
-              </div>
-              <div style={{ fontSize:"0.78rem", color:"var(--muted)", minWidth:60,
-                textAlign:"right", fontFamily:"var(--font-b)" }}>
-                {sum.label}
-              </div>
-              {onDayClick && (
-                <span style={{ color:"var(--muted2)", fontSize:"0.82rem", minWidth:14, textAlign:"center" }}>
-                  {isExpanded ? "▴" : "▾"}
-                </span>
-              )}
+      {!plans.length&&!adding&&<div style={{fontSize:12,color:"var(--muted)",padding:"6px 0"}}>尚無追蹤任務</div>}
+
+      {plans.map(p=>(
+        <div key={p.id} className="task-item">
+          <div style={{flex:1}}>
+            <div style={{fontSize:13,fontWeight:500}}>{p.name||p.method}</div>
+            <div style={{fontSize:11,color:"var(--muted)",marginTop:1}}>
+              {p.method} · {FREQ_OPTIONS.find(f=>f.key===p.freq)?.label} · {p.timesPerPeriod}次
+              {p.nextDue?` · 下次 ${p.nextDue.slice(5)}`:""}
             </div>
+          </div>
+          <button className="act-btn danger" style={{fontSize:11,padding:"3px 10px",flexShrink:0}} onClick={()=>remove(p.id)}>移除</button>
+        </div>
+      ))}
 
-            {isExpanded && (
-              <div style={{
-                border:`1px solid ${isToday ? "var(--accent)" : "var(--border)"}`,
-                borderTop:"none", borderRadius:"0 0 10px 10px",
-                background: isToday ? "rgba(124,111,98,0.04)" : "var(--surface)",
-                padding:"10px 14px 14px 54px",
-              }}>
-                {sum.blocks.filter(b => b.status !== "offline").length === 0 ? (
-                  <div style={{ fontSize:"0.85rem", color:"var(--muted2)" }}>無行程</div>
-                ) : (
-                  <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                    {sum.blocks.filter(b => b.status !== "offline").map((b, i) => {
-                      const s = STATUS[b.status];
-                      const startH = Math.max(b.start, rangeStart);
-                      const endH   = Math.min(b.end, rangeEnd);
-                      return (
-                        <div key={i} style={{ display:"flex", alignItems:"center", gap:10 }}>
-                          <Pip status={b.status} size="sm" />
-                          <span style={{ fontSize:"0.82rem", color:"var(--muted)", fontVariantNumeric:"tabular-nums", minWidth:100 }}>
-                            {String(startH).padStart(2,"0")}:00–{String(endH).padStart(2,"0")}:00
-                          </span>
-                          <span style={{ fontSize:"0.88rem", fontWeight:500, color:s.color }}>{s.label}</span>
-                        </div>
-                      );
-                    })}
+      {adding&&(
+        <div style={{background:"var(--bg)",border:"1px solid var(--border)",borderRadius:10,padding:"12px 14px",marginTop:4}}>
+          <label className="inp-label">任務名稱</label>
+          <input className="inp" placeholder="例：電話追蹤" value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} autoFocus/>
+          <label className="inp-label">聯絡方式</label>
+          <select className="inp" value={form.method} onChange={e=>setForm(f=>({...f,method:e.target.value}))}>
+            {safe.map(m=><option key={m} value={m}>{m}</option>)}
+          </select>
+          <label className="inp-label">頻率</label>
+          <div className="opt-row">
+            {FREQ_OPTIONS.map(fo=>(
+              <div key={fo.key} className={`opt ${form.freq===fo.key?"active":""}`}
+                onClick={()=>setForm(f=>({...f,freq:fo.key,anchorDay:null,anchorDow:null}))}>
+                {fo.label}
+              </div>
+            ))}
+          </div>
+          {form.freq==="monthly"&&(
+            <>
+              <label className="inp-label">固定日期（選填）</label>
+              <div className="opt-row" style={{flexWrap:"wrap"}}>
+                {[null,1,5,10,15,20,25].map(d=>(
+                  <div key={d??0} className={`opt ${form.anchorDay===d?"active":""}`}
+                    style={{minWidth:44,flex:"0 0 auto"}}
+                    onClick={()=>setForm(f=>({...f,anchorDay:d}))}>
+                    {d===null?"不固定":`${d}日`}
                   </div>
+                ))}
+              </div>
+            </>
+          )}
+          {form.freq==="weekly"&&(
+            <>
+              <label className="inp-label">固定星期幾（選填）</label>
+              <div className="opt-row">
+                {DOW_NAMES.map((name,i)=>(
+                  <div key={i} className={`opt ${form.anchorDow===i?"active":""}`}
+                    style={{minWidth:36,flex:"0 0 auto"}}
+                    onClick={()=>setForm(f=>({...f,anchorDow:f.anchorDow===i?null:i}))}>
+                    {name}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          <label className="inp-label">目標次數（每期）</label>
+          <div className="opt-row">
+            {[1,2,3,4].map(n=>(
+              <div key={n} className={`opt ${form.timesPerPeriod===n?"active":""}`}
+                onClick={()=>setForm(f=>({...f,timesPerPeriod:n}))}>
+                {n}次
+              </div>
+            ))}
+          </div>
+          <button className="act-btn primary" style={{width:"100%",marginTop:4}} onClick={add}>加入此任務</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LOG MODAL — with plan association
+// ─────────────────────────────────────────────────────────────────────────────
+
+function LogModal({ case_:c, methods, onClose, onSave }){
+  const safe = methods.length>0?methods:["電話"];
+  const plans = c.trackingPlans||[];
+  const nowH = new Date();
+  const defaultTime = `${String(nowH.getHours()).padStart(2,"0")}:${String(nowH.getMinutes()).padStart(2,"0")}`;
+  // 初始值一致：若有追蹤任務，預設聯絡方式對應第一個任務的方式
+  const [method, setMethod] = useState(plans[0]?.method || safe[0]);
+  const [planId, setPlanId] = useState(plans[0]?.id||null);
+  const [date,   setDate]   = useState(TODAY);
+  const [time,   setTime]   = useState(defaultTime);
+  const [note,   setNote]   = useState("");
+
+  function onMethodChange(m){
+    setMethod(m);
+    // 切換聯絡方式時，自動對應到同方式的追蹤任務；若無對應任務則取消關聯
+    const match = plans.find(p=>p.method===m);
+    setPlanId(match ? match.id : null);
+  }
+  function onPlanChange(p){
+    setPlanId(p?p.id:null);
+    // 選追蹤任務時，自動同步聯絡方式
+    if(p) setMethod(p.method);
+  }
+
+  return (
+    <div className="overlay center" onClick={onClose}>
+      <div className="sheet center" onClick={e=>e.stopPropagation()}>
+        <div className="sheet-title">記錄聯絡</div>
+        <div className="sheet-sub" style={{marginBottom:16}}>{c.nick}</div>
+
+        <label className="inp-label">日期與時間</label>
+        <div style={{display:"flex",gap:8,marginBottom:14}}>
+          <input type="date" className="inp" style={{flex:1,marginBottom:0}} value={date} max={TODAY} onChange={e=>setDate(e.target.value)}/>
+          <input type="time" className="inp" style={{flex:1,marginBottom:0}} value={time} onChange={e=>setTime(e.target.value)}/>
+        </div>
+
+        <label className="inp-label">聯絡方式</label>
+        <select className="inp" value={method} onChange={e=>onMethodChange(e.target.value)}>
+          {safe.map(m=><option key={m} value={m}>{m}</option>)}
+        </select>
+
+        {plans.length>0&&(
+          <>
+            <label className="inp-label">關聯追蹤任務</label>
+            <div style={{marginBottom:14}}>
+              {plans.map(p=>(
+                <div key={p.id} className="plan-pick-row"
+                  onClick={()=>onPlanChange(p)}>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:500}}>{p.name||p.method}</div>
+                    <div style={{fontSize:11,color:"var(--muted)"}}>{p.method} · {FREQ_OPTIONS.find(f=>f.key===p.freq)?.label}</div>
+                  </div>
+                  <div style={{width:20,height:20,borderRadius:"50%",border:`2px solid ${planId===p.id?"var(--accent)":"var(--border)"}`,background:planId===p.id?"var(--accent)":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    {planId===p.id&&<div style={{width:8,height:8,borderRadius:"50%",background:"#fff"}}/>}
+                  </div>
+                </div>
+              ))}
+              <div className="plan-pick-row" onClick={()=>onPlanChange(null)}>
+                <div style={{fontSize:13,color:"var(--muted)"}}>不關聯追蹤任務</div>
+                <div style={{width:20,height:20,borderRadius:"50%",border:`2px solid ${planId===null?"var(--accent)":"var(--border)"}`,background:planId===null?"var(--accent)":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  {planId===null&&<div style={{width:8,height:8,borderRadius:"50%",background:"#fff"}}/>}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        <label className="inp-label">備註（選填）</label>
+        <input className="inp" placeholder="一兩句即可…" value={note} onChange={e=>setNote(e.target.value)} maxLength={120}/>
+        <div className="btn-row">
+          <button className="act-btn" onClick={onClose}>取消</button>
+          <button className="act-btn primary" onClick={()=>{onSave(c.id,method,note.trim(),planId,date,time);onClose();}}>儲存</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EDIT CASE MODAL
+// ─────────────────────────────────────────────────────────────────────────────
+
+function EditCaseModal({ case_:c, methods, levels, onClose, onSave, onDelete }){
+  const safe = methods.length>0?methods:["電話"];
+  const [nick,          setNick]    = useState(c.nick);
+  const [note,          setNote]    = useState(c.note||"");
+  const [level,         setLevel]   = useState(c.level);
+  const [trackingPlans, setPlans]   = useState((c.trackingPlans||[]).map(p=>({...p})));
+  const [err,           setErr]     = useState("");
+  const [confirmDel,    setConfDel] = useState(false);
+
+  function save(){
+    if(!nick.trim()){setErr("暱稱不能空白");return;}
+    onSave(c.id,{nick:nick.trim(),note:note.trim(),level,trackingPlans});
+    onClose();
+  }
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="sheet" onClick={e=>e.stopPropagation()}>
+        <div className="sheet-handle"/>
+        <div className="sheet-title">編輯個案</div>
+        <div className="sheet-sub">{c.id}</div>
+        <label className="inp-label">暱稱／代號</label>
+        <input className="inp" value={nick} onChange={e=>{setNick(e.target.value);setErr("");}} maxLength={20} autoFocus/>
+        {err&&<div className="inp-err">{err}</div>}
+        <label className="inp-label">關懷等級</label>
+        <div className="opt-row">
+          {Object.entries(levels).map(([k,l])=>{
+            const col=LEVEL_COLOR_OPTIONS.find(c=>c.key===l.colorKey)||LEVEL_COLOR_OPTIONS[1];
+            return <div key={k} className={`opt ${level===k?"active":""}`}
+              style={level===k?{background:col.bg,borderColor:col.color,color:col.color}:{}}
+              onClick={()=>setLevel(k)}>{l.label}</div>;
+          })}
+        </div>
+        <label className="inp-label">備註（選填）</label>
+        <input className="inp" placeholder="簡短備忘…" value={note} onChange={e=>setNote(e.target.value)} maxLength={60}/>
+        <TrackingPlanEditor plans={trackingPlans} setPlans={setPlans} methods={safe}/>
+        {confirmDel?(
+          <div style={{background:"var(--red-bg)",border:"1px solid #EDCFCC",borderRadius:10,padding:"12px 14px",marginBottom:14}}>
+            <div style={{fontSize:13,color:"var(--red)",fontWeight:500,marginBottom:6}}>確認刪除「{c.nick}」？</div>
+            <div style={{fontSize:12,color:"var(--muted)",marginBottom:10,lineHeight:1.6}}>此操作無法復原。若暫時不需聯絡，建議改用「封存個案」。</div>
+            <div style={{display:"flex",gap:8}}>
+              <button className="act-btn" style={{flex:1}} onClick={()=>setConfDel(false)}>取消</button>
+              <button className="act-btn danger" style={{flex:1}} onClick={()=>{onDelete(c.id);onClose();}}>確認刪除</button>
+            </div>
+          </div>
+        ):(
+          <div className="btn-row">
+            <button className="act-btn danger" style={{flex:"0 0 auto",padding:"0 16px"}} onClick={()=>setConfDel(true)}>刪除</button>
+            <button className="act-btn" style={{flex:1}} onClick={onClose}>取消</button>
+            <button className="act-btn primary" style={{flex:1}} onClick={save}>儲存</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADD CASE MODAL
+// ─────────────────────────────────────────────────────────────────────────────
+
+function AddCaseModal({ existingCases, levels, methods, onClose, onSave }){
+  const safe = methods.length>0?methods:["電話"];
+  const [step,  setStep]  = useState(0);
+  const [nick,  setNick]  = useState("");
+  const [note,  setNote]  = useState("");
+  const [level, setLevel] = useState(Object.keys(levels)[0]||"B");
+  const [plans, setPlans] = useState([]);
+  const [err,   setErr]   = useState("");
+  const autoId = generateId(existingCases);
+
+  function applyDefaultPlans(levelKey){
+    setLevel(levelKey);
+    try{
+      const raw=localStorage.getItem(LS_DPLANS);
+      const d=raw?JSON.parse(raw):{};
+      if(d[levelKey]&&d[levelKey].length>0)
+        setPlans(d[levelKey].map(p=>({...p,id:genPlanId(),nextDue:calcPlanNextDue(p,TODAY)})));
+    }catch{}
+  }
+
+  function next(){ if(!nick.trim()){setErr("請輸入暱稱");return;} setErr(""); setStep(1); }
+  function save(){
+    onSave({id:autoId,nick:nick.trim(),note:note.trim(),level,archived:false,archivedAt:null,
+      lastContact:TODAY,trackingPlans:plans,logs:[]});
+    onClose();
+  }
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="sheet" onClick={e=>e.stopPropagation()}>
+        <div className="sheet-handle"/>
+        <StepBar total={2} current={step}/>
+        <div className="sheet-title">{step===0?"新增個案":"追蹤設定"}</div>
+        <div className="sheet-sub">{step===0?`編號：${autoId}`:"選擇等級並設定追蹤計畫"}</div>
+        {step===0&&<>
+          <label className="inp-label">暱稱（不可使用真實姓名）</label>
+          <input className="inp" placeholder="例：阿明" value={nick} onChange={e=>{setNick(e.target.value);setErr("");}} maxLength={20} autoFocus/>
+          {err&&<div className="inp-err">{err}</div>}
+          <label className="inp-label">備註（選填）</label>
+          <input className="inp" placeholder="簡短備忘…" value={note} onChange={e=>setNote(e.target.value)} maxLength={60}/>
+          <div className="btn-row">
+            <button className="act-btn" onClick={onClose}>取消</button>
+            <button className="act-btn primary" onClick={next}>下一步</button>
+          </div>
+        </>}
+        {step===1&&<>
+          <label className="inp-label">關懷等級</label>
+          <div className="opt-row">
+            {Object.entries(levels).map(([k,l])=>{
+              const col=LEVEL_COLOR_OPTIONS.find(c=>c.key===l.colorKey)||LEVEL_COLOR_OPTIONS[1];
+              return <div key={k} className={`opt ${level===k?"active":""}`}
+                style={level===k?{background:col.bg,borderColor:col.color,color:col.color}:{}}
+                onClick={()=>applyDefaultPlans(k)}>{l.label}</div>;
+            })}
+          </div>
+          <TrackingPlanEditor plans={plans} setPlans={setPlans} methods={safe}/>
+          <div className="btn-row">
+            <button className="act-btn" onClick={()=>setStep(0)}>上一步</button>
+            <button className="act-btn primary" onClick={save}>建立個案</button>
+          </div>
+        </>}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HOME SCREEN
+// ─────────────────────────────────────────────────────────────────────────────
+
+function HomeScreen({ cases, methods, levels, updateCase, showToast }){
+  const [logModal,  setLogModal]  = useState(null);
+
+  const active = cases.filter(c=>!c.archived);
+  // Show cases with due/overdue plans, or legacy cases without plans
+  const tasks = active
+    .map(c=>{
+      const ts = getTrackStatus(c);
+      // 逾期：有追蹤計畫且 nextDue < TODAY 且未完成
+      const overdue = (ts?.results||[]).some(r=>r.nextDue&&r.nextDue<TODAY&&r.done<r.goal);
+      return {...c, _status:getCaseStatus(c), _overdue:overdue};
+    })
+    .filter(c=>c._status==="red"||c._status==="yellow"||c._status==="green")
+    .sort((a,b)=>{
+      // 逾期排最前
+      if(a._overdue&&!b._overdue) return -1;
+      if(!a._overdue&&b._overdue) return 1;
+      return order2(a._status)-order2(b._status);
+    });
+
+  function handleLogSave(id, method, note, planId, date, time){
+    const logDate = date || TODAY;
+    updateCase(id, prev=>{
+      const newLog = {date:logDate, time:time||"", method, note:note||"已聯絡", planId:planId||undefined};
+      const newLogs = [newLog, ...(prev.logs||[])].sort((a,b)=>b.date.localeCompare(a.date)||(b.time||"").localeCompare(a.time||""));
+      // Update nextDue for the matched plan (based on the recorded date, not necessarily today)
+      const newPlans = (prev.trackingPlans||[]).map(p=>{
+        if(p.id!==planId) return p;
+        return {...p, nextDue:calcPlanNextDue(p, logDate)};
+      });
+      return {lastContact: logDate>prev.lastContact||!prev.lastContact ? logDate : prev.lastContact, trackingPlans:newPlans, logs:newLogs};
+    });
+    showToast("已記錄");
+  }
+
+  const sections=[{key:"red",label:"需要聯絡"},{key:"yellow",label:"即將到期"},{key:"green",label:"已安排"}];
+
+  return (
+    <div className="screen-pad">
+      <div className="ph">
+        <div>
+          <div className="ph-eyebrow">{TODAY_DISPLAY}</div>
+          <div className="ph-title">今天要做的事</div>
+        </div>
+        {tasks.length>0&&<span className="ph-sub">{tasks.length} 項</span>}
+      </div>
+      {tasks.length===0&&<div className="empty">今天沒有待辦<br/>好好休息</div>}
+      {sections.map(s=>{
+        const group=tasks.filter(c=>c._status===s.key);
+        if(!group.length) return null;
+        return (
+          <div key={s.key}>
+            <div className="sec-label">{s.label}</div>
+            {group.map(c=>(
+              <div className="card-row" key={c.id}
+                style={{cursor:"pointer",alignItems:"center",gap:14}}
+                onClick={()=>setLogModal(c)}>
+                {/* 圓圈：未完成=淺灰小圓，完成=深藍→綠漸層實心圓（logo 色系） */}
+                {(()=>{
+                  const ts=getTrackStatus(c);
+                  const done=ts?.allDone;
+                  return <div className={done?"ring-completed":"ring-uncompleted"}/>;
+                })()}
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <span className="row-nick">{c.nick}</span>
+                    <span style={{color:"var(--muted)",fontSize:13}}>·</span>
+                    <span style={{fontSize:13,color:"var(--text2)"}}>
+                      {(()=>{
+                        const ts = getTrackStatus(c);
+                        // 只顯示「今天到期且未完成」的任務方式；若無則退回顯示全部未完成任務的方式
+                        const due = (ts?.results||[]).filter(r=>r.done<r.goal && r.nextDue && r.nextDue<=TODAY);
+                        const pool = due.length>0 ? due : (ts?.results||[]).filter(r=>r.done<r.goal);
+                        const list = pool.length>0 ? pool : (c.trackingPlans||[]);
+                        return list.map(p=>p.method).filter((v,i,a)=>a.indexOf(v)===i).join("、")||"—";
+                      })()}
+                    </span>
+                  </div>
+                </div>
+                {/* 逾期紅點 */}
+                {c._overdue && (
+                  <div style={{width:8,height:8,borderRadius:"50%",background:"var(--red)",flexShrink:0}}/>
                 )}
+              </div>
+            ))}
+          </div>
+        );
+      })}
+      {logModal&&<LogModal case_={logModal} methods={methods} onClose={()=>setLogModal(null)} onSave={handleLogSave}/>}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CASES SCREEN
+// ─────────────────────────────────────────────────────────────────────────────
+
+function CasesScreen({ cases, methods, levels, onAdd, onOpen, updateCase, deleteCase, showToast }){
+  const [swipedId,    setSwipedId]    = useState(null);
+  const [delConfId,   setDelConfId]   = useState(null);
+  const [levelFilter, setLevelFilter] = useState(null); // null = 全部
+  const touchStartX = useRef(0);
+  const active   = cases.filter(c=>!c.archived);
+  const filtered = levelFilter ? active.filter(c=>c.level===levelFilter) : active;
+  const sorted   = [...filtered].sort((a,b)=>order2(getCaseStatus(a))-order2(getCaseStatus(b)));
+
+  return (
+    <div className="screen-pad">
+      <div className="ph">
+        <div><div className="ph-eyebrow">追蹤中的個案</div><div className="ph-title">個案列表</div></div>
+        <button className="ph-action" onClick={onAdd}>＋ 新增</button>
+      </div>
+      <div className="filter-row">
+        <div className={`filter-chip ${levelFilter===null?"active":""}`}
+          onClick={()=>setLevelFilter(null)}>全部</div>
+        {Object.entries(levels).map(([k,l])=>{
+          const cnt = active.filter(c=>c.level===k).length;
+          if(cnt===0) return null;
+          return (
+            <div key={k} className={`filter-chip ${levelFilter===k?"active":""}`}
+              onClick={()=>setLevelFilter(levelFilter===k?null:k)}>
+              {l.label}
+            </div>
+          );
+        })}
+      </div>
+      {filtered.length===0&&<div className="empty">{levelFilter?`沒有${levels[levelFilter]?.label}的個案`:"目前沒有聯絡中的個案"}<br/>{levelFilter?"":"點右上角新增"}</div>}
+      {sorted.map(c=>{
+        const st=getCaseStatus(c);
+        const isSwiped=swipedId===c.id, isDelConf=delConfId===c.id;
+        return (
+          <div className="swipe-row" key={c.id}>
+            <div className="swipe-actions">
+              <button className="swipe-btn sb-archive"
+                onClick={()=>{updateCase(c.id,()=>({archived:true,archivedAt:new Date().toISOString()}));setSwipedId(null);showToast("已封存個案");}}>
+                <span className="swipe-btn-icon">↓</span>封存
+              </button>
+              <button className="swipe-btn sb-delete" onClick={()=>{setDelConfId(c.id);setSwipedId(null);}}>
+                <span className="swipe-btn-icon">✕</span>刪除
+              </button>
+            </div>
+            <div className={`swipe-card${isSwiped?" swiped":""}`}
+              onClick={()=>{if(isSwiped){setSwipedId(null);return;}onOpen(c.id);}}
+              onTouchStart={e=>{touchStartX.current=e.touches[0].clientX;}}
+              onTouchEnd={e=>{const dx=touchStartX.current-e.changedTouches[0].clientX;if(dx>40)setSwipedId(c.id);else if(dx<-20)setSwipedId(null);}}>
+              {/* 左側：等級圓圈 — 顯示完整等級名稱（1個字維持原大小，2字以上縮小字級） */}
+              {(()=>{
+                const label = levels[c.level]?.label || c.level;
+                const isShort = label.length<=1;
+                return (
+                  <div className={`level-circle lc-${levels[c.level]?.colorKey||"faint"}${isShort?"":" lc-long"}`}>
+                    {label}
+                  </div>
+                );
+              })()}
+              {/* 中間：姓名 + 下次聯繫 */}
+              <div className="row-main">
+                <div className="row-nick">{c.nick}</div>
+                <div className="row-meta" style={{marginTop:4}}>
+                  {(()=>{
+                    const ts=getTrackStatus(c);
+                    const nextPlan=ts?.results.filter(r=>r.done<r.goal&&r.nextDue).sort((a,b)=>a.nextDue>b.nextDue?1:-1)[0];
+                    const nextDate=nextPlan?.nextDue||c.lastContact;
+                    return <span>下次：{nextDate?nextDate.slice(5):"—"}</span>;
+                  })()}
+                </div>
+              </div>
+              {/* 右側：本月進度 */}
+              {(()=>{
+                const ts=getTrackStatus(c);
+                if(!ts||!ts.results.length) return null;
+                if(ts.results.length===1){
+                  // 只有一個計畫：直接顯示該計畫的週期與進度
+                  const r=ts.results[0];
+                  return (
+                    <div style={{flexShrink:0,textAlign:"right"}}>
+                      <div style={{fontSize:10,color:"var(--muted)",fontWeight:600,letterSpacing:".03em"}}>{periodLabel(r.freq)}</div>
+                      <div style={{fontSize:15,fontWeight:700,color:r.done>=r.goal?"var(--green)":"var(--yellow)"}}>
+                        {r.done}/{r.goal}
+                      </div>
+                    </div>
+                  );
+                }
+                // 多個計畫：顯示尚未完成中最緊迫（nextDue 最近）的那個週期標籤；進度為彙總
+                const total=ts.results.reduce((s,r)=>s+r.goal,0);
+                const done=ts.results.reduce((s,r)=>s+Math.min(r.done,r.goal),0);
+                const urgent=ts.results.filter(r=>r.done<r.goal&&r.nextDue).sort((a,b)=>a.nextDue>b.nextDue?1:-1)[0]||ts.results[0];
+                return (
+                  <div style={{flexShrink:0,textAlign:"right"}}>
+                    <div style={{fontSize:10,color:"var(--muted)",fontWeight:600,letterSpacing:".03em"}}>{periodLabel(urgent.freq)}</div>
+                    <div style={{fontSize:15,fontWeight:700,color:done>=total?"var(--green)":"var(--yellow)"}}>
+                      {done}/{total}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+            {isDelConf&&(
+              <div className="del-confirm">
+                <div style={{fontSize:13,color:"var(--red)",fontWeight:500,marginBottom:4}}>確認刪除「{c.nick}」？</div>
+                <div style={{fontSize:11,color:"var(--muted)",lineHeight:1.6,marginBottom:8}}>此操作無法復原。若暫時不需聯絡，建議改用「封存個案」。</div>
+                <div style={{display:"flex",gap:6}}>
+                  <button className="act-btn" style={{flex:1,fontSize:12}} onClick={()=>setDelConfId(null)}>取消</button>
+                  <button className="act-btn" style={{flex:1,fontSize:12,color:"var(--yellow)",borderColor:"#EDD9A0",background:"var(--yellow-bg)"}}
+                    onClick={()=>{updateCase(c.id,()=>({archived:true,archivedAt:new Date().toISOString()}));showToast("已封存個案");setDelConfId(null);}}>改為封存</button>
+                  <button className="act-btn danger" style={{flex:1,fontSize:12}} onClick={()=>{deleteCase(c.id);setDelConfId(null);}}>確認刪除</button>
+                </div>
               </div>
             )}
           </div>
@@ -876,1305 +1001,330 @@ function WeekGrid({ weekEvents, rangeStart = 8, rangeEnd = 22, onDayClick, weekS
     </div>
   );
 }
-// ─── Event modal (add / edit) ──────────────────────────────────────
-function EventModal({ event, onSave, onClose }) {
-  const isEdit = !!event?.id;
-  const nowH = new Date().getHours();
-  const [form, setForm] = useState({
-    title:     event?.title     ?? "",
-    date:      event?.date      ?? dateStr(),
-    startTime: event?.startTime ? fmtTime(event.startTime) : `${String(nowH).padStart(2,"0")}:00`,
-    endTime:   event?.endTime   ? fmtTime(event.endTime)   : `${String(nowH+1).padStart(2,"0")}:00`,
-    note:      event?.note      ?? "",
-    status:    event?.status    ?? "busy",
-  });
 
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+// ─────────────────────────────────────────────────────────────────────────────
+// DETAIL SCREEN
+// ─────────────────────────────────────────────────────────────────────────────
 
-  const handleSave = () => {
-    if (!form.title.trim()) return;
-    const startTime = new Date(`${form.date}T${form.startTime}:00`).toISOString();
-    const endTime   = new Date(`${form.date}T${form.endTime}:00`).toISOString();
-    onSave({ id: event?.id ?? newId(), date: form.date, title: form.title.trim(), startTime, endTime, note: form.note, status: form.status });
-  };
 
+function EditLogPanel({ log, methods, onClose, onSave, onDelete }) {
+  const [date,       setDate]   = useState(log.date||TODAY);
+  const [time,       setTime]   = useState(log.time||"");
+  const [method,     setMethod] = useState(log.method||(methods[0]||"電話"));
+  const [note,       setNote]   = useState(log.note||"");
+  const [confirmDel, setConfirmDel] = useState(false);
   return (
-    <div className="modal-backdrop" onClick={e => e.target===e.currentTarget && onClose()}>
-      <div className="modal">
-        <div className="modal-drag" />
-        <div className="modal-title">{isEdit ? "編輯事件" : "新增事件"}</div>
-
-        <div className="field">
-          <div className="field-label">事件名稱</div>
-          <input className="input" placeholder="例：社區訪視、個案會議…" value={form.title}
-            onChange={e => {
-              const v = e.target.value;
-              const suggested = guessStatus(v);
-              set("title", v);
-              if (!isEdit) set("status", suggested);
-            }} />
-        </div>
-
-        <div className="field">
-          <div className="field-label">日期</div>
-          <input className="input" type="date" value={form.date}
-            onChange={e => set("date", e.target.value)} />
-        </div>
-
-        <div className="time-row">
-          <div className="field">
-            <div className="field-label">開始時間</div>
-            <input className="input" type="time" value={form.startTime} onChange={e => set("startTime", e.target.value)} />
+    <div style={{margin:"-4px 22px 8px 50px",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"0 0 var(--r) var(--r)",padding:"12px 14px"}}>
+      {confirmDel ? (
+        <>
+          <div style={{fontSize:12,color:"var(--red)",marginBottom:8}}>確認刪除這筆紀錄？</div>
+          <div style={{display:"flex",gap:6}}>
+            <button className="act-btn" style={{flex:1,fontSize:12}} onClick={()=>setConfirmDel(false)}>取消</button>
+            <button className="act-btn danger" style={{flex:1,fontSize:12}} onClick={onDelete}>確認刪除</button>
           </div>
-          <div className="field">
-            <div className="field-label">結束時間</div>
-            <input className="input" type="time" value={form.endTime} onChange={e => set("endTime", e.target.value)} />
-          </div>
-        </div>
-
-        <div className="field">
-          <div className="field-label">這段時間別人可以怎麼找我？</div>
-          <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
-            {STATUS_KEYS.map(k => {
-              const s = STATUS[k];
-              const selected = form.status === k;
-              return (
-                <div key={k}
-                  style={{
-                    display:"flex", alignItems:"center", gap:10,
-                    padding:"9px 12px", borderRadius:9,
-                    border:`1px solid ${selected ? s.color : "var(--border)"}`,
-                    background: selected ? s.bg : "var(--surface2)",
-                    cursor:"pointer", transition:"all 0.14s",
-                  }}
-                  onClick={() => set("status", k)}>
-                  <Pip status={k} size="sm" />
-                  <span style={{ fontSize:"0.88rem", fontWeight: selected ? 500 : 400, color: selected ? s.color : "var(--text)" }}>
-                    {s.label}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="btn-row">
-          <button className="btn btn-g" onClick={onClose}>取消</button>
-          <button className="btn btn-p" onClick={handleSave} disabled={!form.title.trim()}>
-            {isEdit ? "儲存" : "新增"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Share Sheet ───────────────────────────────────────────────────
-// Single preview: timeline bar + status blocks (no titles, no notes)
-// Two action buttons: 複製連結 + 存成圖片
-// ─── ShareSheet — extracted to components/ShareSheet.jsx ──────────
-function ShareSheet({ events, onClose, toast, mode = "today" }) {
-  const blocks    = buildBlocks(events.filter(ev => !ev.date || ev.date === dateStr()));
-  const daytime   = blocks.filter(b => b.end > 8 && b.start < 22 && b.status !== "offline");
-  const dateLabel = new Date().toLocaleDateString("zh-TW", { month:"long", day:"numeric" });
-  const weekday   = new Date().toLocaleDateString("zh-TW", { weekday:"long" });
-  const isWeek    = mode === "week";
-
-  const weekEvents = buildWeekEvents(events);
-
-  const copyLink = () => {
-    navigator.clipboard?.writeText(SHARE_URL).catch(() => {});
-    toast("已複製連結 ✓");
-    onClose();
-  };
-
-  const saveImage = () => {
-    toast("圖片已儲存 ✓（示意）");
-    onClose();
-  };
-
-  return (
-    <>
-      <div className="sh-sheet-backdrop" onClick={onClose} />
-      <div className="sh-sheet">
-        <div className="sh-sheet-handle" />
-
-        {/* Title */}
-        <div>
-          <div className="sh-sheet-title">{isWeek ? "找我建議" : "分享今日行程"}</div>
-          <div style={{ fontSize:"0.74rem", color:"var(--muted)", marginTop:3 }}>
-            對方看到的樣子
-          </div>
-        </div>
-
-        {/* ── Preview card ── */}
-        <div className="sh-preview">
-          {/* Header */}
-          <div style={{ marginBottom:10 }}>
-            <div style={{ fontFamily:"var(--font-d)", fontStyle:"italic", fontSize:"1rem", color:"var(--text)" }}>
-              Can we…?
-            </div>
-            <div style={{ fontSize:"0.7rem", color:"var(--muted)", marginTop:1 }}>
-              {isWeek ? getWeekHeader() : `${weekday}｜${dateLabel}`}
-            </div>
-          </div>
-
-          {isWeek ? (
-            /* 找我建議 — ranked by free time */
-            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-              {(() => {
-                const rec = getWeekRecommendations(weekEvents, 8, 22);
-                const sections = [
-                  { label:"🟢 最推薦",  days: rec.best, color:"var(--c-free)"    },
-                  { label:"🟢 推薦",    days: rec.good, color:"var(--c-reply)"   },
-                  { label:"🟡 可以找",  days: rec.ok,   color:"var(--c-reply)"   },
-                  { label:"🔴 較不建議",days: rec.busy, color:"var(--c-busy)"    },
-                ].filter(s => s.days.length > 0);
-                return sections.map(sec => (
-                  <div key={sec.label}>
-                    <div style={{ fontSize:"0.72rem", fontWeight:500, color:sec.color,
-                      marginBottom:5, letterSpacing:"0.04em" }}>
-                      {sec.label}
-                    </div>
-                    <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
-                      {sec.days.map(d => (
-                        <div key={d.di} style={{
-                          padding:"5px 12px", borderRadius:99,
-                          background:"var(--surface2)", border:"1px solid var(--border2)",
-                          fontSize:"0.8rem", fontFamily:"var(--font-b)", color:"var(--text)",
-                        }}>
-                          週{WEEK_DAYS[d.di]}
-                          {d.freeH > 0 && <span style={{ color:"var(--muted)", marginLeft:4 }}>{d.freeH}h空閒</span>}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ));
-              })()}
-            </div>
-          ) : (
-            <>
-              {/* Mini timeline */}
-              <div style={{ marginBottom:12 }}>
-                <TimelineBar blocks={blocks} />
-              </div>
-
-              {/* Status blocks */}
-              {daytime.length === 0 ? (
-                <div style={{ fontSize:"0.82rem", color:"var(--muted2)", textAlign:"center", padding:"8px 0" }}>
-                  今天沒有行程
-                </div>
-              ) : (
-                <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
-                  {daytime.map((b, i) => {
-                    const s = STATUS[b.status];
-                    return (
-                      <div key={i} className="sh-preview-row"
-                        style={{ background: s.bg, borderRadius:8, padding:"9px 12px", border:`1px solid ${s.color}22` }}>
-                        <Pip status={b.status} size="sm" />
-                        <span className="sh-preview-time">{fmt(b.start)}–{fmt(b.end)}</span>
-                        <span className="sh-preview-lbl" style={{ color: s.color }}>{s.label}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </>
-          )}
-
-          {/* Privacy note */}
-          <div style={{
-            marginTop:10, fontSize:"0.67rem", color:"var(--muted2)",
-            borderTop:`1px solid var(--border)`, paddingTop:8, lineHeight:1.6,
-          }}>
-            🔒 不顯示事件名稱與備註
-          </div>
-        </div>
-
-        {/* Action buttons */}
-        <div className="btn-row">
-          <button className="btn btn-g" onClick={copyLink}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/>
-              <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/>
-            </svg>
-            複製連結
-          </button>
-          <button className="btn btn-p" onClick={saveImage}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-            存成圖片
-          </button>
-        </div>
-      </div>
-    </>
-  );
-}
-
-// ─── Page: Home ────────────────────────────────────────────────────
-function HomePage({ events, displayRange, setTab, toast }) {
-  const [shareOpen, setShareOpen] = useState(false);
-  const todayEvs = events.filter(ev => !ev.date || ev.date === dateStr());
-  const blocks   = buildBlocks(todayEvs);
-  const nowHour  = new Date().getHours();
-  const nowMins  = new Date().getMinutes();
-  const nowBlock = blocks.find(b => nowHour >= b.start && nowHour < b.end);
-  const nowStatus = nowBlock?.status ?? "offline";
-  const s = STATUS[nowStatus];
-
-  const sorted    = [...todayEvs].sort((a,b) => new Date(a.startTime)-new Date(b.startTime));
-  const currentEv = sorted.find(ev => {
-    const sh = new Date(ev.startTime).getHours();
-    const eh = new Date(ev.endTime).getHours();
-    return nowHour >= sh && nowHour < eh;
-  });
-
-  return (
-    <div style={{ display:"flex", flexDirection:"column", height:"calc(100dvh - 64px)", overflow:"hidden" }}>
-
-      {/* Scrollable content */}
-      <div style={{ flex:1, overflowY:"auto", padding:"28px 22px 8px" }}>
-
-        {/* Date header */}
-        <div style={{ marginBottom:22 }}>
-          <div style={{ fontFamily:"var(--font-d)", fontStyle:"italic", fontSize:"1.5rem", letterSpacing:"-0.01em" }}>今天</div>
-          <div style={{ fontSize:"0.82rem", color:"var(--muted)", marginTop:2 }}>{fmtDateLabel()}</div>
-        </div>
-
-        {/* Status card */}
-        <div className="card" style={{ marginBottom:14 }}>
-          <div className="card-label">現在</div>
-          <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-            <Pip status={nowStatus} size="md" />
-            <div>
-              <div style={{ fontFamily:"var(--font-b)", fontWeight:500, fontSize:"1.4rem", letterSpacing:"-0.01em", color:s.color }}>
-                {s.label}
-              </div>
-              {nowBlock && nowStatus !== "offline" && (
-                <div style={{ fontSize:"0.75rem", color:"var(--muted)", marginTop:2 }}>
-                  到 {fmt(nowBlock.end)} 為止{currentEv && ` · ${currentEv.title}`}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Mini timeline */}
-        <div className="card" style={{ padding:"14px 18px", marginBottom:14 }}>
-          <TimelineBar blocks={blocks} />
-        </div>
-
-        {/* Today full schedule */}
-        {sorted.length > 0 && (
-          <div className="card" style={{ marginBottom:14 }}>
-            <div className="card-label" style={{ marginBottom:10 }}>今日行程</div>
-            <div style={{ display:"flex", flexDirection:"column" }}>
-              {sorted.map((ev, i) => {
-                const es = STATUS[ev.status];
-                const isPast = new Date(ev.endTime) < new Date();
-                return (
-                  <div key={ev.id} style={{
-                    display:"flex", alignItems:"center", gap:12,
-                    padding:"9px 0",
-                    borderBottom: i < sorted.length-1 ? "1px solid var(--border)" : "none",
-                    opacity: isPast ? 0.45 : 1,
-                  }}>
-                    <Pip status={ev.status} size="sm" />
-                    <div style={{ flex:1 }}>
-                      <div style={{ fontSize:"0.88rem", fontWeight:500, color:"var(--text)" }}>{ev.title}</div>
-                      <div style={{ fontSize:"0.72rem", color:"var(--muted)", marginTop:1, fontVariantNumeric:"tabular-nums" }}>
-                        {fmtTime(ev.startTime)} – {fmtTime(ev.endTime)}
-                      </div>
-                    </div>
-                    <div style={{ fontSize:"0.72rem", color:es.color, fontWeight:500 }}>{es.label}</div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Pinned bottom action bar — no border, lifted from edge */}
-      <div style={{
-        flexShrink:0, padding:"10px 22px 20px",
-        background:"var(--bg)",
-        display:"flex", gap:10,
-      }}>
-        <button className="btn btn-p" style={{ flex:1 }} onClick={() => setTab("行程")}>
-          📋 管理行程
-        </button>
-        <button className="btn btn-g" style={{ flex:1 }} onClick={() => setShareOpen(true)}>
-          ↗ 分享
-        </button>
-      </div>
-
-      {shareOpen && <ShareSheet events={events} toast={toast} mode="today" onClose={() => setShareOpen(false)} />}
-    </div>
-  );
-}
-
-// ─── Day View ──────────────────────────────────────────────────────
-const PX_PER_HR = 36;  // pixels per hour in timeline
-const SNAP_MINS = 15;  // drag snap resolution
-function minsToTimeStr(m) {
-  const h = Math.floor(m / 60), min = m % 60;
-  return `${String(h).padStart(2,"0")}:${String(min).padStart(2,"0")}`;
-}
-function isoToMins(iso) {
-  const d = new Date(iso);
-  return d.getHours() * 60 + d.getMinutes();
-}
-function minsToISO(mins) {
-  const today = new Date().toISOString().slice(0,10);
-  return new Date(`${today}T${minsToTimeStr(mins)}:00`).toISOString();
-}
-
-// ─── DayView — extracted to components/DayView.jsx ────────────────
-// ─── DayView — split into DayView.jsx + DayTimeline.jsx + DayEvent.jsx + useDayDrag.js ──
-// In multi-file project: import DayView from './DayView.jsx'
-// Inline below for single-file build compatibility.
-function DayView({ events, setEvents, onEdit, rangeStart = 8, rangeEnd = 22 }) {
-  const colRef       = useRef(null);
-  const containerRef = useRef(null);
-  const dragRef      = useRef(null);
-
-  const PX       = PX_PER_HR;
-  const totalHrs = rangeHours(rangeStart, rangeEnd);
-  const totalH   = totalHrs * PX;
-
-  // Convert absolute minutes to pixel Y (cross-day aware)
-  const toY = (mins) => {
-    const h = Math.floor(mins / 60) % 24;
-    let offset = h - rangeStart;
-    if (offset < 0) offset += 24;
-    const minOffset = (mins % 60) / 60;
-    return (offset + minOffset) * PX;
-  };
-
-  const nowH    = new Date().getHours();
-  const nowMins = new Date().getHours() * 60 + new Date().getMinutes();
-  const nowOff  = hourToOffset(nowH, rangeStart, totalHrs);
-  const nowY    = nowOff !== null ? toY(nowMins) : -1;
-
-  // Visible hours array (handles cross-day wraparound)
-  const hours = Array.from({ length: totalHrs + 1 }, (_, i) => (rangeStart + i) % 24);
-
-  useEffect(() => {
-    if (containerRef.current && nowY > 0) {
-      containerRef.current.scrollTop = Math.max(0, nowY - 80);
-    }
-  }, [rangeStart]);
-
-  const startDrag = (e, type, ev) => {
-    e.preventDefault(); e.stopPropagation();
-    const startY    = e.touches ? e.touches[0].clientY : e.clientY;
-    const origStart = isoToMins(ev.startTime);
-    const origEnd   = isoToMins(ev.endTime);
-    dragRef.current = { type, evId: ev.id, startY, origStart, origEnd };
-
-    const onMove = (me) => {
-      if (!dragRef.current) return;
-      const clientY = me.touches ? me.touches[0].clientY : me.clientY;
-      const dy = clientY - dragRef.current.startY;
-      const dMins = Math.round((dy / PX) * 60 / SNAP_MINS) * SNAP_MINS;
-      const { type, evId, origStart, origEnd } = dragRef.current;
-      const duration = (origEnd - origStart + 1440) % 1440;
-      setEvents(prev => prev.map(ev => {
-        if (ev.id !== evId) return ev;
-        let ns = origStart, ne = origEnd;
-        if (type === 'move') {
-          ns = (origStart + dMins + 1440) % 1440;
-          ne = (ns + duration) % 1440;
-        } else if (type === 'top') {
-          ns = (origStart + dMins + 1440) % 1440;
-        } else if (type === 'bottom') {
-          ne = (origEnd + dMins + 1440) % 1440;
-        }
-        return { ...ev, startTime: minsToISO(ns), endTime: minsToISO(ne) };
-      }));
-    };
-
-    const onEnd = () => {
-      dragRef.current = null;
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup',   onEnd);
-      window.removeEventListener('touchmove', onMove);
-      window.removeEventListener('touchend',  onEnd);
-    };
-    window.addEventListener('mousemove', onMove, { passive: false });
-    window.addEventListener('mouseup',   onEnd);
-    window.addEventListener('touchmove', onMove, { passive: false });
-    window.addEventListener('touchend',  onEnd);
-  };
-
-  return (
-    <div className="dv-container" ref={containerRef}>
-      <div className="dv-wrap" style={{ height: totalH }}>
-        <div className="dv-time-col" style={{ height: totalH }}>
-          {hours.map((h, i) => (
-            <div key={i} className="dv-hour-lbl" style={{ top: i * PX }}>
-              {String(h).padStart(2,'0')}
-            </div>
-          ))}
-        </div>
-        <div className="dv-col" ref={colRef} style={{ height: totalH }}>
-          {hours.map((h, i) => (
-            <div key={i}>
-              <div className="dv-gridline" style={{ top: i * PX }} />
-              {i < totalHrs && <div className="dv-gridline half" style={{ top: i * PX + PX / 2 }} />}
-            </div>
-          ))}
-          {nowY >= 0 && (
-            <div className="dv-now-line" style={{ top: nowY }}>
-              <div className="dv-now-dot" />
-            </div>
-          )}
-          {events.map(ev => {
-            const startM = isoToMins(ev.startTime);
-            const startH = new Date(ev.startTime).getHours();
-            const offStart = hourToOffset(startH, rangeStart, totalHrs);
-            if (offStart === null) return null;
-            const endM   = isoToMins(ev.endTime);
-            const top    = toY(startM);
-            const endTop = toY(endM);
-            const height = Math.max(endTop > top ? endTop - top : totalH - top + endTop, 24);
-            const s      = STATUS[ev.status];
-            return (
-              <div key={ev.id} className="dv-event"
-                style={{ top, height, background: s.bg, borderColor: s.color }}
-                onMouseDown={e => startDrag(e, 'move', ev)}
-                onTouchStart={e => startDrag(e, 'move', ev)}
-                onDoubleClick={e => { e.stopPropagation(); onEdit(ev); }}>
-                <div className="dv-resize top"
-                  onMouseDown={e => startDrag(e, 'top', ev)}
-                  onTouchStart={e => startDrag(e, 'top', ev)} />
-                <div className="dv-event-title" style={{ color: s.color }}>{ev.title}</div>
-                {height > 36 && (
-                  <div className="dv-event-time">
-                    {minsToTimeStr(startM)} – {minsToTimeStr(endM)}
-                  </div>
-                )}
-                <div className="dv-resize bottom"
-                  onMouseDown={e => startDrag(e, 'bottom', ev)}
-                  onTouchStart={e => startDrag(e, 'bottom', ev)} />
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Page: Events ──────────────────────────────────────────────────
-function EventsPage({ events, setEvents, displayRange, weekStart = 0, toast }) {
-  const [modal, setModal]         = useState(null);
-  const [view, setView]           = useState("day");
-  const [viewDate, setViewDate]   = useState(dateStr());
-  const [shareOpen, setShareOpen] = useState(null);
-  const [expandedDay, setExpandedDay] = useState(null); // date string for expanded day in week/month
-
-  const dayEvents  = events.filter(ev => !ev.date || ev.date === viewDate);
-  const weekEvents = buildWeekEvents(events, weekStart);
-  const todayStr   = dateStr();
-
-  const handleSave = (ev) => {
-    const saved = { ...ev, date: ev.date || viewDate };
-    setEvents(prev => {
-      const idx = prev.findIndex(e => e.id === saved.id);
-      if (idx >= 0) { const n=[...prev]; n[idx]=saved; return n; }
-      return [...prev, saved];
-    });
-    toast(modal?.id ? "已更新 ✓" : "已新增 ✓");
-    setModal(null);
-  };
-
-  const handleDelete = (id) => { setEvents(prev => prev.filter(e => e.id !== id)); toast("已刪除"); };
-
-  // Week: toggle expand, no navigation
-  const handleWeekCellClick = (weekDayIdx) => {
-    const today = new Date();
-    const monOffset = -((today.getDay() + 6) % 7);
-    const d = new Date(today); d.setDate(today.getDate() + monOffset + weekDayIdx);
-    const ds = dateStr(d);
-    setExpandedDay(prev => prev === ds ? null : ds);
-  };
-
-  // Month: toggle expand, no navigation
-  const handleMonthCellClick = (cell) => {
-    if (cell.otherMonth) return;
-    setExpandedDay(prev => prev === cell.date ? null : cell.date);
-    setViewDate(cell.date);
-  };
-
-  const shiftDay = (n) => { const d = new Date(viewDate); d.setDate(d.getDate() + n); setViewDate(dateStr(d)); };
-  const shiftWeek = (n) => {
-    const today = new Date();
-    const monOffset = -((today.getDay() + 6) % 7);
-    const mon = new Date(today); mon.setDate(today.getDate() + monOffset + n * 7);
-    setViewDate(dateStr(mon));
-    setExpandedDay(null);
-  };
-  const shiftMonth = (n) => {
-    const d = new Date(viewDate + "T12:00:00"); d.setMonth(d.getMonth() + n);
-    setViewDate(dateStr(d));
-    setExpandedDay(null);
-  };
-
-  const isToday = viewDate === todayStr;
-  const vd = new Date(viewDate + "T12:00:00");
-
-  const dayLabel = vd.toLocaleDateString("zh-TW", { month:"numeric", day:"numeric", weekday:"short" });
-  const weekLabel = (() => {
-    const today = new Date();
-    const monOffset = -((today.getDay() + 6) % 7);
-    const mon = new Date(today); mon.setDate(today.getDate() + monOffset);
-    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
-    const f = d => `${d.getMonth()+1}/${d.getDate()}`;
-    return `${f(mon)} – ${f(sun)}`;
-  })();
-  const monthLabel = vd.toLocaleDateString("zh-TW", { year:"numeric", month:"long" });
-
-  const navLabel = view === "day" ? dayLabel : view === "week" ? weekLabel : monthLabel;
-  const onPrev   = view === "day" ? () => shiftDay(-1) : view === "week" ? () => shiftWeek(-1) : () => shiftMonth(-1);
-  const onNext   = view === "day" ? () => shiftDay(1)  : view === "week" ? () => shiftWeek(1)  : () => shiftMonth(1);
-
-  // Month view cells
-  const monthCells = (() => {
-    const d = new Date(viewDate + "T12:00:00");
-    const year = d.getFullYear(); const month = d.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const startDow = (firstDay.getDay() + 6) % 7;
-    const daysInMonth = new Date(year, month+1, 0).getDate();
-    const cells = [];
-    for (let i = 0; i < startDow; i++) {
-      const pd = new Date(year, month, -startDow + i + 1);
-      cells.push({ date: dateStr(pd), day: pd.getDate(), otherMonth: true });
-    }
-    for (let d2 = 1; d2 <= daysInMonth; d2++) {
-      const dd = new Date(year, month, d2);
-      cells.push({ date: dateStr(dd), day: d2, otherMonth: false });
-    }
-    while (cells.length % 7 !== 0) {
-      const nd = new Date(year, month+1, cells.length - startDow - daysInMonth + 1);
-      cells.push({ date: dateStr(nd), day: nd.getDate(), otherMonth: true });
-    }
-    return cells;
-  })();
-
-  // Day detail panel — shown in week/month when a day is expanded
-  const DayDetail = ({ date }) => {
-    const evs = events.filter(ev => ev.date === date).sort((a,b) => new Date(a.startTime)-new Date(b.startTime));
-    const blocks = buildBlocks(evs);
-    const visibleBlocks = blocks.filter(b => b.status !== "offline" && b.end > displayRange.start && b.start < displayRange.end);
-    const dl = new Date(date + "T12:00:00").toLocaleDateString("zh-TW", { month:"numeric", day:"numeric", weekday:"short" });
-    return (
-      <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:12, padding:"14px 16px", marginTop:8 }}>
-        <div style={{ fontSize:"0.75rem", color:"var(--muted)", marginBottom:10, fontWeight:500 }}>{dl}</div>
-        {visibleBlocks.length === 0 ? (
-          <div style={{ fontSize:"0.8rem", color:"var(--muted2)" }}>無行程</div>
-        ) : (
-          <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-            {visibleBlocks.map((b, i) => {
-              const s = STATUS[b.status];
-              return (
-                <div key={i} style={{ display:"flex", alignItems:"center", gap:10 }}>
-                  <Pip status={b.status} size="sm" />
-                  <span style={{ fontSize:"0.78rem", color:"var(--muted)", fontVariantNumeric:"tabular-nums", minWidth:90 }}>
-                    {fmt(b.start)}:00 – {fmt(b.end)}:00
-                  </span>
-                  <span style={{ fontSize:"0.82rem", fontWeight:500, color:s.color }}>{s.label}</span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const shareMode = view === "week" || view === "month" ? "week" : "today";
-
-  return (
-    <div style={{ display:"flex", flexDirection:"column", height:"calc(100dvh - 64px)", overflow:"hidden" }}>
-
-      {/* Toggle + date nav */}
-      <div style={{ padding:"12px 22px 0", flexShrink:0, display:"flex", flexDirection:"column", gap:8 }}>
-        <div style={{ display:"flex", justifyContent:"center" }}>
-          <div className="view-toggle">
-            {["day","week","month"].map((v) => (
-              <button key={v} className={`view-toggle-btn ${view===v?"on":""}`}
-                onClick={() => { setView(v); setExpandedDay(null); }}>
-                {{"day":"日","week":"週","month":"月"}[v]}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="date-nav-row">
-          <button className="date-nav-btn" onClick={onPrev}>‹</button>
-          <div className="date-nav-label">{navLabel}</div>
-          <button className="date-nav-btn" onClick={onNext}>›</button>
-          {!isToday && view === "day" && (
-            <button onClick={() => setViewDate(todayStr)}
-              style={{ fontSize:"0.7rem", color:"var(--accent)", background:"none", border:"none", cursor:"pointer", padding:"2px 6px" }}>
-              今天
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Body */}
-      <div style={{ flex:1, minHeight:0, display:"flex", flexDirection:"column" }}>
-
-        {/* Day view */}
-        {view === "day" && (
-          <div style={{ flex:1, minHeight:0, display:"flex", flexDirection:"column", padding:"0 12px 4px" }}>
-            <DayView events={dayEvents} setEvents={setEvents} onEdit={ev => setModal(ev)}
-              rangeStart={displayRange.start} rangeEnd={displayRange.end} />
-          </div>
-        )}
-
-        {/* Week view — click expands inline, no navigation */}
-        {view === "week" && (
-          <div style={{ flex:1, minHeight:0, overflowY:"auto", padding:"8px 22px 16px" }}>
-            <WeekGrid weekEvents={weekEvents} rangeStart={displayRange.start} rangeEnd={displayRange.end}
-              onDayClick={handleWeekCellClick} weekStart={weekStart}
-              expandedDay={expandedDay}
-              getExpandDate={(di) => {
-                const today = new Date();
-                const dow = (today.getDay() + 6) % 7;
-                let offset = dow - weekStart;
-                if (offset < 0) offset += 7;
-                const d = new Date(today);
-                d.setDate(today.getDate() - offset + di);
-                return dateStr(d);
-              }}
-            />
-          </div>
-        )}
-
-        {/* Month view — click shows detail below calendar */}
-        {view === "month" && (
-          <div style={{ flex:1, minHeight:0, overflowY:"auto", padding:"8px 16px 16px" }}>
-            <div className="mv-grid">
-              {["一","二","三","四","五","六","日"].map(d => (
-                <div key={d} className="mv-day-hdr">週{d}</div>
-              ))}
-              {monthCells.map((cell, i) => {
-                const cellEvents = events.filter(ev => ev.date === cell.date);
-                const dots = cellEvents.slice(0,3);
-                const isExpanded = cell.date === expandedDay;
-                return (
-                  <div key={i}
-                    className={`mv-cell ${cell.date === todayStr ? "today" : ""} ${cell.otherMonth ? "other-month" : ""} ${isExpanded ? "mv-selected" : ""}`}
-                    onClick={() => handleMonthCellClick(cell)}>
-                    <div className="mv-date">{cell.day}</div>
-                    {dots.length > 0 && (
-                      <div className="mv-dots">
-                        {dots.map((ev,j) => (
-                          <div key={j} className="mv-dot" style={{ background: STATUS[ev.status]?.color || "var(--muted2)" }} />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            {/* Day detail below calendar */}
-            {expandedDay && <DayDetail date={expandedDay} />}
-          </div>
-        )}
-      </div>
-
-      {/* Share button */}
-      <div style={{ position:"absolute", top:12, right:22, zIndex:10 }}>
-        <button className="btn-outline" style={{ fontSize:"0.75rem", padding:"5px 10px" }}
-          onClick={() => setShareOpen(shareMode)}>↗ 分享</button>
-      </div>
-
-      <button className="fab" onClick={() => setModal("add")} title="新增事件">＋</button>
-
-      {modal && <EventModal event={modal==="add"?{ date:viewDate }:modal} onSave={handleSave} onClose={() => setModal(null)} />}
-      {shareOpen && <ShareSheet events={events} toast={toast} mode={shareOpen} onClose={() => setShareOpen(null)} />}
-    </div>
-  );
-}
-
-
-// ─── Google Calendar Service ───────────────────────────────────────
-// In multi-file project: import { GoogleCalendarService } from './GoogleCalendarService.js'
-// In multi-file project: import GoogleCalendarImport from './GoogleCalendarImport.jsx'
-//
-// Inline stub — mirrors GoogleCalendarService.js exports exactly.
-// OAuth / fetch / convert / dedup logic lives in GoogleCalendarService.js.
-// Main app (Home, DayView, WeekView, EventModal) never references this directly.
-const GoogleCalendarService = (() => {
-  function _todayAt(h) { const d = new Date(); d.setHours(h,0,0,0); return d.toISOString(); }
-  let _counter = 1000;
-
-  async function connect(existingEvents = [], rules = []) {
-    // TODO: replace with real OAuth → _oauthConnect() in GoogleCalendarService.js
-    const raw = await new Promise(resolve => setTimeout(() => resolve([
-      { gcalId:"gc1", title:"社區訪視",   startTime:_todayAt(9),  endTime:_todayAt(12) },
-      { gcalId:"gc2", title:"個案會議",   startTime:_todayAt(13), endTime:_todayAt(15) },
-      { gcalId:"gc3", title:"寫個案紀錄", startTime:_todayAt(15), endTime:_todayAt(17) },
-      { gcalId:"gc4", title:"自由時間",   startTime:_todayAt(19), endTime:_todayAt(21) },
-    ]), 1400));
-    const proposed = raw.map(ev => ({
-      id: "gcal_" + (++_counter), gcalId: ev.gcalId, title: ev.title,
-      date: dateStr(new Date(ev.startTime)), startTime: ev.startTime,
-      endTime: ev.endTime, note: "", status: guessStatus(ev.title), source: "google",
-    }));
-    const importedIds = new Set(existingEvents.filter(e => e.source === "google").map(e => e.gcalId));
-    return proposed.filter(ev => !importedIds.has(ev.gcalId));
-  }
-
-  function adjustStatus(proposed, gcalId, status) {
-    return proposed.map(ev => ev.gcalId === gcalId ? { ...ev, status } : ev);
-  }
-
-  function disconnect() {}
-
-  return { connect, adjustStatus, disconnect };
-})();
-
-// ─── Settings sub-pages ────────────────────────────────────────────
-
-// Shared back button
-function SettingsBack({ onBack, title }) {
-  return (
-    <div style={{ marginBottom:18 }}>
-      <button className="settings-back" onClick={onBack}>
-        ← 設定
-      </button>
-      <div style={{ fontFamily:"var(--font-d)", fontStyle:"italic", fontSize:"1.3rem" }}>{title}</div>
-    </div>
-  );
-}
-
-// Sub-page: 狀態管理
-function StatusSettings({ onBack, toast }) {
-  const [statuses, setStatuses] = useState(
-    STATUS_KEYS.map(k => ({ key: k, label: STATUS[k].label, desc: "" }))
-  );
-  const set = (k, field, val) =>
-    setStatuses(s => s.map(x => x.key === k ? { ...x, [field]: val } : x));
-
-  return (
-    <div className="page" style={{ paddingTop:20 }}>
-      <SettingsBack onBack={onBack} title="狀態管理" />
-      <div className="card">
-        <div style={{ fontSize:"0.72rem", color:"var(--muted2)", marginBottom:14, lineHeight:1.6 }}>
-          自訂每個狀態的名稱與說明。名稱會顯示在分享頁和行程卡片上。
-        </div>
-        {statuses.map(({ key, label, desc }) => {
-          const s = STATUS[key];
-          return (
-            <div key={key} className="status-editor-row">
-              <div className="status-color-dot" style={{ background: s.color }} />
-              <div style={{ flex:1 }}>
-                <input className="status-name-input" value={label}
-                  onChange={e => set(key, "label", e.target.value)}
-                  placeholder={STATUS[key].label} />
-                <input className="status-desc-input" value={desc}
-                  onChange={e => set(key, "desc", e.target.value)}
-                  placeholder="說明文字（選填，例：正在開會，請稍後聯繫）" />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <button className="btn btn-p" style={{ alignSelf:"flex-start", flex:"none", padding:"11px 28px" }} onClick={() => toast("已儲存 ✓")}>儲存</button>
-    </div>
-  );
-}
-
-// Sub-page: 關鍵字規則
-function KeywordSettings({ rules, setRules, onBack, toast }) {
-  const [newKw, setNewKw] = useState("");
-  const STATUS_OPTIONS = STATUS_KEYS.map(k => ({ value: k, label: `${STATUS[k].emoji} ${STATUS[k].label}` }));
-
-  const addRule = () => {
-    if (!newKw.trim()) return;
-    setRules(rs => [...rs, { id: newId(), keyword: newKw.trim(), status: "busy" }]);
-    setNewKw("");
-    toast("已新增 ✓");
-  };
-
-  const deleteRule = (id) => setRules(rs => rs.filter(r => r.id !== id));
-
-  return (
-    <div className="page" style={{ paddingTop:20 }}>
-      <SettingsBack onBack={onBack} title="關鍵字規則" />
-      <div className="card">
-        <div className="card-label" style={{ marginBottom:10 }}>自動分類規則</div>
-        <div style={{ fontSize:"0.72rem", color:"var(--muted2)", marginBottom:14, lineHeight:1.6 }}>
-          匯入 Google Calendar 時自動推薦狀態。手動設定優先權最高。
-        </div>
-        {rules.map((r, i) => (
-          <div key={r.id} className="rule-row">
-            <span className="rule-kw">{r.keyword}</span>
-            <span className="rule-arr">→</span>
-            <select className="sel" value={r.status}
-              onChange={e => setRules(rs => rs.map((x,j) => j===i ? {...x, status:e.target.value} : x))}>
-              {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-            <button className="ev-action-btn" onClick={() => deleteRule(r.id)} style={{ marginLeft:4 }}>✕</button>
-          </div>
-        ))}
-        {/* Add new keyword */}
-        <div style={{ display:"flex", gap:8, marginTop:14 }}>
-          <input className="input" style={{ flex:1, padding:"8px 12px", fontSize:"0.85rem" }}
-            placeholder="新增關鍵字…" value={newKw}
-            onChange={e => setNewKw(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && addRule()} />
-          <button className="btn btn-g" style={{ flex:"none", padding:"8px 14px" }} onClick={addRule}>新增</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Sub-page: 顯示時間範圍
-function TimeRangeSettings({ displayRange, setDisplayRange, onBack, toast }) {
-  const [start, setStart] = useState(displayRange.start);
-  const [end,   setEnd]   = useState(displayRange.end);
-
-  const isCrossDay  = end <= start;
-  const hoursCount  = isCrossDay ? (24 - start) + end : end - start;
-  const valid       = hoursCount >= 1 && hoursCount <= 23;
-
-  const save = async () => {
-    if (!valid) { toast("時間範圍無效"); return; }
-    const range = { start, end };
-    setDisplayRange(range);
-    await saveRange(range);
-    toast("已套用 ✓");
-    onBack();
-  };
-
-  return (
-    <div className="page" style={{ paddingTop:20 }}>
-      <SettingsBack onBack={onBack} title="顯示時間範圍" />
-      <div className="card">
-        <div style={{ fontSize:"0.75rem", color:"var(--muted)", marginBottom:16, lineHeight:1.6 }}>
-          設定日視圖和週視圖顯示的時間範圍。支援跨日（晚上開始、隔日結束）。
-        </div>
-        <div className="time-range-row">
-          <span className="time-range-label">開始</span>
-          <select className="time-range-select" value={start} onChange={e => setStart(Number(e.target.value))}>
-            {Array.from({length:24},(_,h) => (
-              <option key={h} value={h}>{String(h).padStart(2,"0")}:00</option>
-            ))}
-          </select>
-        </div>
-        <div className="time-range-row">
-          <span className="time-range-label">結束</span>
-          <select className="time-range-select" value={end} onChange={e => setEnd(Number(e.target.value))}>
-            {Array.from({length:24},(_,h) => (
-              <option key={h} value={h}>{String(h).padStart(2,"0")}:00</option>
-            ))}
-          </select>
-        </div>
-        <div style={{
-          fontSize:"0.76rem", padding:"8px 12px", borderRadius:8,
-          background: isCrossDay ? "#B7A46A18" : "var(--surface2)",
-          color: isCrossDay ? "var(--c-reply)" : "var(--muted2)",
-          lineHeight:1.7,
-        }}>
-          {isCrossDay
-            ? `🌙 跨日模式：${String(start).padStart(2,"0")}:00 → 隔日 ${String(end).padStart(2,"0")}:00（共 ${hoursCount} 小時）`
-            : `${String(start).padStart(2,"0")}:00 – ${String(end).padStart(2,"0")}:00（共 ${hoursCount} 小時）`}
-        </div>
-      </div>
-      <button className="btn btn-p" style={{ alignSelf:"flex-start", flex:"none", padding:"11px 28px" }}
-        onClick={save} disabled={!valid}>套用</button>
-    </div>
-  );
-}
-
-// Sub-page: Google Calendar 匯入
-// GcalSettings is a thin shell — all logic lives in:
-//   GoogleCalendarService.js  (OAuth, fetch, convert, dedup)
-//   GoogleCalendarImport.jsx  (UI states: idle/connecting/preview/imported)
-// This function only wires onImport → setEvents.
-function GcalSettings({ events, setEvents, onBack, toast }) {
-  const [gcalState, setGcalState] = useState("idle");
-  const [preview, setPreview]     = useState([]);
-
-  const connectGoogle = async () => {
-    setGcalState("connecting");
-    try {
-      const proposed = await GoogleCalendarService.connect(events, []);
-      setPreview(proposed);
-      setGcalState("preview");
-    } catch (_) {
-      setGcalState("idle");
-      toast("連結失敗，請重試");
-    }
-  };
-
-  const handleAdjustStatus = (gcalId, status) =>
-    setPreview(p => GoogleCalendarService.adjustStatus(p, gcalId, status));
-
-  const confirmImport = () => {
-    setEvents(prev => [...prev, ...preview]);  // ← only line that touches App state
-    setGcalState("imported");
-    toast(`已匯入 ${preview.length} 個事件 ✓`);
-  };
-
-  const disconnect = () => { GoogleCalendarService.disconnect(); setGcalState("idle"); setPreview([]); };
-
-  const STATUS_OPTIONS = STATUS_KEYS.map(k => ({ value: k, label: `${STATUS[k].emoji} ${STATUS[k].label}` }));
-
-  return (
-    <div className="page" style={{ paddingTop:20 }}>
-      <SettingsBack onBack={onBack} title="Google Calendar 匯入" />
-
-      <div className="card" style={{ marginBottom:12 }}>
-        <div className="card-label">同步策略</div>
-        {[
-          ["1", "連結 Google Calendar", "授權讀取行事曆事件（只讀取，不回寫）"],
-          ["2", "匯入事件，推薦狀態",   "依關鍵字規則推薦，匯入前可手動調整"],
-          ["3", "在 CanWe 自由編輯",    "修改只在 CanWe 內生效，不影響 Google Calendar"],
-        ].map(([n, t, d]) => (
-          <div key={n} className="gcal-import-step">
-            <div className="gcal-step-num">{n}</div>
-            <div className="gcal-step-body">
-              <div className="gcal-step-title">{t}</div>
-              <div className="gcal-step-desc">{d}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="card">
-        {gcalState === "idle" && (
-          <button className="gcal-connect-btn" onClick={connectGoogle}>
-            <svg width="15" height="15" viewBox="0 0 24 24">
-              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-            </svg>
-            連結 Google 行事曆
-          </button>
-        )}
-        {gcalState === "connecting" && (
-          <div style={{ display:"flex", alignItems:"center", gap:10, padding:"4px 0", color:"var(--muted)", fontSize:"0.86rem" }}>
-            <div className="spinner" /> 讀取行事曆事件中…
-          </div>
-        )}
-        {gcalState === "preview" && (
-          <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-            <div style={{ fontSize:"0.8rem", color:"var(--muted)", lineHeight:1.6 }}>
-              找到 {preview.length} 個事件，匯入前可調整狀態：
-            </div>
-            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-              {preview.map(ev => {
-                const s = STATUS[ev.status];
-                return (
-                  <div key={ev.gcalId} style={{ border:`1px solid ${s.color}28`, borderRadius:10, background:s.bg, padding:"10px 12px", display:"flex", flexDirection:"column", gap:7 }}>
-                    <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                      <div style={{ flex:1 }}>
-                        <div style={{ fontSize:"0.88rem", fontWeight:500 }}>{ev.title}</div>
-                        <div style={{ fontSize:"0.72rem", color:"var(--muted)", marginTop:1, fontVariantNumeric:"tabular-nums" }}>
-                          {fmtTime(ev.startTime)} – {fmtTime(ev.endTime)}
-                        </div>
-                      </div>
-                      <Pip status={ev.status} size="sm" />
-                    </div>
-                    <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
-                      {STATUS_KEYS.map(k => {
-                        const ks = STATUS[k]; const sel = ev.status === k;
-                        return (
-                          <button key={k} onClick={() => handleAdjustStatus(ev.gcalId, k)}
-                            style={{ border:`1px solid ${sel ? ks.color : "var(--border2)"}`, background:sel ? ks.bg : "var(--surface)", color:sel ? ks.color : "var(--muted)", borderRadius:7, padding:"3px 9px", fontSize:"0.72rem", fontFamily:"var(--font-b)", cursor:"pointer", fontWeight:sel?500:400, transition:"all 0.14s" }}>
-                            {ks.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="btn-row">
-              <button className="btn btn-g" onClick={disconnect}>取消</button>
-              <button className="btn btn-p" onClick={confirmImport}>確認匯入</button>
-            </div>
-          </div>
-        )}
-        {gcalState === "imported" && (
-          <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-            <div className="gcal-connected">
-              <Pip status="free" size="sm" />
-              <div>
-                <div style={{ fontSize:"0.86rem", fontWeight:500 }}>已連結 Google 行事曆</div>
-                <div style={{ fontSize:"0.73rem", color:"var(--muted)", marginTop:2 }}>demo@gmail.com · 剛剛同步</div>
-              </div>
-            </div>
-            <div className="gcal-notice">
-              ✏️ 匯入的事件可在「行程」頁編輯。修改只在 CanWe 內生效。
-            </div>
-            <button className="btn-outline" style={{ alignSelf:"flex-start" }} onClick={disconnect}>取消連結</button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── Main settings menu ────────────────────────────────────────────
-// ─── Settings sub-page: 固定排程 ──────────────────────────────────
-const WEEKDAYS = ["一","二","三","四","五","六","日"];
-const WEEKDAY_FULL = ["週一","週二","週三","週四","週五","週六","週日"];
-const HOURS = Array.from({length:24},(_,h)=>h);
-
-const DEFAULT_RECURRING = []; // { id, title, days:[0-6], startTime:"HH:MM", endTime:"HH:MM", status }
-
-function RecurringSettings({ recurring, setRecurring, onBack, toast }) {
-  const [editing, setEditing] = useState(null); // null | "new" | schedule object
-
-  const blankForm = () => ({
-    id: newId(), title: "", days: [0,1,2,3,4], // Mon–Fri default
-    startTime: "12:00", endTime: "13:00", status: "free",
-  });
-
-  const [form, setForm] = useState(blankForm());
-  const setF = (k,v) => setForm(f => ({...f,[k]:v}));
-
-  const toggleDay = (d) => {
-    setF("days", form.days.includes(d)
-      ? form.days.filter(x=>x!==d)
-      : [...form.days, d].sort());
-  };
-
-  const openNew = () => { setForm(blankForm()); setEditing("new"); };
-  const openEdit = (s) => { setForm({...s}); setEditing(s); };
-
-  const save = () => {
-    if (!form.title.trim() || form.days.length === 0) {
-      toast("請填寫名稱並選擇星期"); return;
-    }
-    const entry = { ...form, title: form.title.trim() };
-    setRecurring(rs => {
-      const idx = rs.findIndex(r => r.id === entry.id);
-      if (idx >= 0) { const n=[...rs]; n[idx]=entry; return n; }
-      return [...rs, entry];
-    });
-    toast("已儲存 ✓");
-    setEditing(null);
-  };
-
-  const del = (id) => {
-    setRecurring(rs => rs.filter(r => r.id !== id));
-    toast("已刪除");
-  };
-
-  const STATUS_OPTIONS = STATUS_KEYS.map(k => ({ value:k, label:`${STATUS[k].emoji} ${STATUS[k].label}` }));
-
-  // ── Edit form ──
-  if (editing) return (
-    <div className="page" style={{ paddingTop:20 }}>
-      <SettingsBack onBack={() => setEditing(null)} title={editing==="new"?"新增固定排程":"編輯固定排程"} />
-
-      <div className="card" style={{ display:"flex", flexDirection:"column", gap:16 }}>
-        {/* Title */}
-        <div className="field">
-          <div className="field-label">名稱</div>
-          <input className="input" placeholder="例：午休、晨會、固定訪視…" value={form.title}
-            onChange={e => setF("title", e.target.value)} />
-        </div>
-
-        {/* Weekday selector */}
-        <div className="field">
-          <div className="field-label">重複星期</div>
-          <div className="recur-days">
-            {WEEKDAYS.map((d,i) => (
-              <button key={i} className={`recur-day-btn ${form.days.includes(i)?"on":""}`}
-                onClick={() => toggleDay(i)}>
-                {d}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Time */}
-        <div className="field">
-          <div className="field-label">時間</div>
-          <div className="recur-time-row">
-            <select className="recur-time-sel" value={form.startTime}
-              onChange={e => setF("startTime", e.target.value)}>
-              {HOURS.flatMap(h => ["00","15","30","45"].map(m => {
-                const v = `${String(h).padStart(2,"0")}:${m}`;
-                return <option key={v} value={v}>{v}</option>;
-              }))}
-            </select>
-            <span className="recur-time-sep">–</span>
-            <select className="recur-time-sel" value={form.endTime}
-              onChange={e => setF("endTime", e.target.value)}>
-              {HOURS.flatMap(h => ["00","15","30","45"].map(m => {
-                const v = `${String(h).padStart(2,"0")}:${m}`;
-                return <option key={v} value={v}>{v}</option>;
-              }))}
-            </select>
-          </div>
-        </div>
-
-        {/* Status */}
-        <div className="field">
-          <div className="field-label">這段時間的狀態</div>
-          <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
-            {STATUS_KEYS.map(k => {
-              const s = STATUS[k]; const sel = form.status===k;
-              return (
-                <div key={k} onClick={() => setF("status",k)}
-                  style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 12px", borderRadius:9,
-                    border:`1px solid ${sel?s.color:"var(--border)"}`,
-                    background: sel?s.bg:"var(--surface2)", cursor:"pointer", transition:"all 0.14s" }}>
-                  <Pip status={k} size="sm" />
-                  <span style={{ fontSize:"0.88rem", fontWeight:sel?500:400, color:sel?s.color:"var(--text)" }}>{s.label}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      <div className="btn-row">
-        <button className="btn btn-g" onClick={() => setEditing(null)}>取消</button>
-        <button className="btn btn-p" onClick={save}>儲存</button>
-      </div>
-    </div>
-  );
-
-  // ── List view ──
-  return (
-    <div className="page" style={{ paddingTop:20 }}>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:18 }}>
-        <div>
-          <button className="settings-back" onClick={onBack}>← 設定</button>
-          <div style={{ fontFamily:"var(--font-d)", fontStyle:"italic", fontSize:"1.3rem" }}>固定排程</div>
-        </div>
-        <button className="btn-outline" style={{ padding:"6px 14px", fontSize:"0.8rem" }} onClick={openNew}>＋ 新增</button>
-      </div>
-
-      {recurring.length === 0 ? (
-        <div className="recur-empty">
-          還沒有固定排程<br />
-          <span style={{ fontSize:"0.78rem" }}>例如：每週一到五 12:00–13:30 午休</span>
-        </div>
+        </>
       ) : (
-        <div className="card">
-          {recurring.map(r => {
-            const s = STATUS[r.status];
-            return (
-              <div key={r.id} className="recur-row" onClick={() => openEdit(r)} style={{ cursor:"pointer" }}>
-                <div style={{ flex:1 }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
-                    <Pip status={r.status} size="sm" />
-                    <span style={{ fontSize:"0.9rem", fontWeight:500 }}>{r.title}</span>
-                    <span style={{ fontSize:"0.76rem", color:s.color }}>{s.label}</span>
-                  </div>
-                  <div style={{ fontSize:"0.76rem", color:"var(--muted)", marginBottom:5 }}>
-                    {r.startTime} – {r.endTime}
-                  </div>
-                  <div className="recur-tag">
-                    {r.days.map(d => (
-                      <span key={d} className="recur-tag-chip">{WEEKDAY_FULL[d]}</span>
-                    ))}
-                  </div>
+        <>
+          <div style={{display:"flex",gap:8,marginBottom:8}}>
+            <input type="date" className="inp" style={{flex:1,marginBottom:0,height:36,padding:"0 10px",fontSize:12}}
+              value={date} onChange={e=>setDate(e.target.value)}/>
+            <select className="inp" style={{flex:1,marginBottom:0,height:36,padding:"0 8px",fontSize:12}}
+              value={method} onChange={e=>setMethod(e.target.value)}>
+              {(methods||["電話"]).map(m=><option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+          <input type="time" className="inp" style={{marginBottom:8,height:36,padding:"0 10px",fontSize:12}}
+            value={time} onChange={e=>setTime(e.target.value)} placeholder="時間（選填）"/>
+          <input className="inp" style={{marginBottom:8,height:36,padding:"0 10px",fontSize:12}}
+            value={note} onChange={e=>setNote(e.target.value)} placeholder="備註（選填）" maxLength={120}/>
+          <div style={{display:"flex",gap:6}}>
+            <button className="act-btn danger" style={{fontSize:11,padding:"4px 10px"}} onClick={()=>setConfirmDel(true)}>刪除</button>
+            <button className="act-btn" style={{flex:1,fontSize:12}} onClick={onClose}>取消</button>
+            <button className="act-btn primary" style={{flex:1,fontSize:12}}
+              onClick={()=>onSave({...log,date,time,method,note})}>儲存</button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast }){
+  const [logModal,       setLogModal]       = useState(false);
+  const [visitModal,     setVisitModal]     = useState(false);
+  const [editLogIdx,     setEditLogIdx]     = useState(null); // index of log being edited
+  const [archiveConfirm, setArchiveConfirm] = useState(false);
+  const [editModal,      setEditModal]      = useState(false);
+  const ts = getTrackStatus(c);
+  const thisMonth = TODAY.slice(0,7);
+  const monthVisitDone = (c.logs||[]).some(l=>l.date?.startsWith(thisMonth)&&(l.method==="訪視"||l.method==="家訪"));
+  const hasMonthVisit = monthVisitDone;
+
+  function handleLogSave(id, method, note, planId, date, time){
+    const logDate = date || TODAY;
+    updateCase(id, prev=>{
+      const newLog={date:logDate,time:time||"",method,note:note||"已聯絡",planId:planId||undefined};
+      const newPlans=(prev.trackingPlans||[]).map(p=>{
+        if(p.id!==planId) return p;
+        return {...p,nextDue:calcPlanNextDue(p,logDate)};
+      });
+      const newLogs=[newLog,...(prev.logs||[])].sort((a,b)=>b.date.localeCompare(a.date)||(b.time||"").localeCompare(a.time||""));
+      return{lastContact: logDate>prev.lastContact||!prev.lastContact ? logDate : prev.lastContact, trackingPlans:newPlans, logs:newLogs};
+    });
+    showToast("已記錄");
+  }
+  function handleEditSave(id,patch){ updateCase(id,()=>patch); showToast("已更新"); }
+
+  return (
+    <div className="screen-pad">
+      <div className="ph">
+        <div>
+          <button className="back-btn" onClick={onBack}>‹ 返回</button>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginTop:4}}>
+            <div className="det-title">{c.nick}</div>
+            <LevelBadge levelKey={c.level} levels={levels}/>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <button className="ph-action" style={{color:"var(--yellow)"}} onClick={()=>setArchiveConfirm(v=>!v)}>封存</button>
+          <button className="ph-action" onClick={()=>setEditModal(true)}>編輯</button>
+        </div>
+      </div>
+
+      {/* 本期追蹤進度 */}
+      {ts&&(
+        <div className="plan-block">
+          <div className="plan-block-hd">
+            <span>{ts.allDone?"✓ 本期追蹤計畫已完成":"本期追蹤進度"}</span>
+          </div>
+          {ts.results.map((r,i)=>(
+            <div key={i} className="plan-row" style={{flexDirection:"column",alignItems:"stretch",gap:8}}>
+              <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between"}}>
+                <div style={{flex:1}}>
+                  <div className="plan-name">{r.name||r.method}</div>
+                  <div className="plan-freq">{r.method} · {FREQ_OPTIONS.find(f=>f.key===r.freq)?.label}</div>
                 </div>
-                <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                  <button className="ev-action-btn" onClick={e => { e.stopPropagation(); del(r.id); }}>✕</button>
-                  <span style={{ color:"var(--muted2)", fontSize:"0.85rem" }}>›</span>
+                <div className={`plan-prog ${r.done>=r.goal?"done":"todo"}`}>
+                  {r.done}/{r.goal} {r.done>=r.goal?"✓":"⚠"}
                 </div>
               </div>
-            );
-          })}
+              {r.nextDue&&(
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+                  <span style={{
+                    fontSize:12,color:"var(--accent)",fontWeight:500,
+                    border:"1px solid var(--accent)",borderRadius:8,
+                    padding:"3px 10px",display:"inline-block"
+                  }}>
+                    下次 {r.nextDue.slice(5)}{r.visitTime?" "+r.visitTime:""}
+                  </span>
+                  <button className="act-btn danger" style={{fontSize:11,padding:"3px 8px",flexShrink:0}}
+                    onClick={()=>{
+                      updateCase(c.id,prev=>({
+                        trackingPlans:(prev.trackingPlans||[]).map(p=>
+                          p.id===r.id?{...p,nextDue:null,visitTime:""}:p)
+                      }));
+                      showToast("已取消預約");
+                    }}>取消預約</button>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
 
-      <div style={{ fontSize:"0.72rem", color:"var(--muted2)", lineHeight:1.7, padding:"0 2px" }}>
-        固定排程會自動套用到每週對應的日期，可在行程頁手動覆蓋。
-      </div>
-    </div>
-  );
-}
-
-// Sub-page: 週起始日
-function WeekStartSettings({ weekStart, setWeekStart, onBack, toast }) {
-  const DAY_OPTIONS = [
-    { value: 0, label: "週一" },
-    { value: 1, label: "週二" },
-    { value: 2, label: "週三" },
-    { value: 3, label: "週四" },
-    { value: 4, label: "週五" },
-    { value: 5, label: "週六" },
-    { value: 6, label: "週日" },
-  ];
-  return (
-    <div className="page" style={{ paddingTop:20 }}>
-      <SettingsBack onBack={onBack} title="週起始日" />
-      <div className="card">
-        <div style={{ fontSize:"0.75rem", color:"var(--muted)", marginBottom:14, lineHeight:1.6 }}>
-          設定週視圖從哪天開始排列。
+      <div className="info-grid">
+        <div className="info-cell"><div className="info-label">上次聯絡</div><div className="info-val">{c.lastContact?c.lastContact.slice(5).replace("-","/"):"—"}</div></div>
+        <div className="info-cell">
+          <div className="info-label">下次連絡</div>
+          <div className="info-val">
+            {(()=>{
+              const ts2=getTrackStatus(c);
+              const next=ts2?.results.filter(r=>r.done<r.goal&&r.nextDue).sort((a,b)=>a.nextDue>b.nextDue?1:-1)[0];
+              return next?next.nextDue.slice(5).replace("-","/"):"—";
+            })()}
+          </div>
         </div>
-        {DAY_OPTIONS.map(opt => (
-          <div key={opt.value}
-            onClick={() => { setWeekStart(opt.value); toast(`週起始日已設為 ${opt.label} ✓`); }}
-            style={{
-              display:"flex", alignItems:"center", justifyContent:"space-between",
-              padding:"13px 0", borderBottom:"1px solid var(--border)", cursor:"pointer",
-            }}>
-            <span style={{ fontSize:"0.9rem", fontWeight: weekStart === opt.value ? 500 : 400 }}>
-              {opt.label}
-            </span>
-            {weekStart === opt.value && (
-              <span style={{ color:"var(--accent)", fontSize:"1rem" }}>✓</span>
-            )}
+        {c.note&&<div className="info-cell full"><div className="info-label">備註</div><div className="info-val" style={{fontWeight:400,fontSize:13,lineHeight:1.5}}>{c.note}</div></div>}
+      </div>
+
+      <div className="det-actions">
+        <button className="act-btn primary" onClick={()=>setLogModal(true)}>記錄聯絡</button>
+        <button className="act-btn" onClick={()=>setVisitModal(true)}
+          style={hasMonthVisit?{opacity:.5}:{}}>
+          {hasMonthVisit?"本月已訪視":"預約訪視"}
+        </button>
+      </div>
+
+      {archiveConfirm&&(
+        <div style={{margin:"0 16px 12px",background:"var(--yellow-bg)",border:"1px solid #EDD9A0",borderRadius:"var(--r)",padding:"14px 16px"}}>
+          <div style={{fontSize:14,fontWeight:500,marginBottom:6}}>封存此個案？</div>
+          <div style={{fontSize:12,color:"var(--muted)",lineHeight:1.7,marginBottom:12}}>
+            封存後不會出現在首頁及個案管理，所有聯絡紀錄完整保留。
           </div>
-        ))}
+          <div style={{display:"flex",gap:8}}>
+            <button className="act-btn" style={{flex:1}} onClick={()=>setArchiveConfirm(false)}>取消</button>
+            <button className="act-btn primary" style={{flex:1}} onClick={()=>{updateCase(c.id,()=>({archived:true,archivedAt:new Date().toISOString()}));showToast("已封存個案");onBack();}}>確認封存</button>
+          </div>
+        </div>
+      )}
+
+      <div className="sec-label" style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <span>聯絡紀錄</span>
+        {c.logs&&c.logs.length>0&&<span style={{fontWeight:400,letterSpacing:0,textTransform:"none",fontSize:11}}>{c.logs.length} 筆</span>}
+      </div>
+      {(!c.logs||c.logs.length===0)&&<div style={{margin:"0 16px 12px",padding:"12px 14px",background:"var(--surface2)",borderRadius:"var(--r)",fontSize:12,color:"var(--muted)"}}>尚無聯絡紀錄，點「記錄聯絡」開始記錄。</div>}
+      {(c.logs||[]).map((log,i)=>(
+        <div key={i}>
+          <div className="log-item" style={{cursor:"pointer"}} onClick={()=>setEditLogIdx(editLogIdx===i?null:i)}>
+            <div className="log-line"/>
+            <div className="log-body" style={{flex:1}}>
+              <div className="log-date">
+                {log.date}{log.time?` ${log.time}`:""} · <span style={{background:"var(--surface2)",padding:"1px 7px",borderRadius:4,fontSize:11}}>{log.method}</span>
+                {log.planId&&(()=>{const p=c.trackingPlans?.find(p=>p.id===log.planId);return p?<span style={{marginLeft:4,fontSize:10,color:"var(--accent-mid)"}}>{p.name||p.method}</span>:null;})()}
+              </div>
+              <div className="log-note" style={{marginTop:3}}>{log.note}</div>
+            </div>
+            <div style={{fontSize:11,color:"var(--muted)",flexShrink:0,alignSelf:"center"}}>⋯</div>
+          </div>
+          {editLogIdx===i&&(
+            <EditLogPanel log={log} idx={i} onClose={()=>setEditLogIdx(null)}
+              methods={methods}
+              onSave={(newLog)=>{
+                updateCase(c.id,prev=>({
+                  logs:prev.logs.map((l,j)=>j===i?newLog:l)
+                }));
+                setEditLogIdx(null); showToast("已更新");
+              }}
+              onDelete={()=>{
+                updateCase(c.id,prev=>({
+                  logs:prev.logs.filter((_,j)=>j!==i)
+                }));
+                setEditLogIdx(null); showToast("已刪除");
+              }}/>
+          )}
+        </div>
+      ))}
+
+      {logModal&&<LogModal case_={c} methods={methods} onClose={()=>setLogModal(false)} onSave={handleLogSave}/>}
+      {visitModal&&<VisitModal case_={c} methods={methods} onClose={()=>setVisitModal(false)}
+        onSave={(id,method,date,time,note)=>{
+          updateCase(id,prev=>({
+            trackingPlans:(prev.trackingPlans||[]).map(p=>
+              p.method===method?{...p,nextDue:date,visitTime:time||"",visitNote:note||""}:p),
+          }));
+          showToast(`已預約${method} ${date.slice(5)}${time?" "+time:""}`);
+        }}/>}
+      {editModal&&<EditCaseModal case_={c} methods={methods} levels={levels}
+        onClose={()=>setEditModal(false)} onSave={handleEditSave}
+        onDelete={(id)=>{updateCase(id,()=>null);onBack();}}/>}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CALENDAR SCREEN
+// ─────────────────────────────────────────────────────────────────────────────
+
+
+function VisitModal({ case_:c, methods, onClose, onSave }) {
+  const d7 = new Date(TODAY); d7.setDate(d7.getDate()+7);
+  const visitMethods = (methods||[]).filter(m=>["訪視","家訪","訪談","學校訪談"].includes(m));
+  const defaultMethod = visitMethods.length>0 ? visitMethods[0] : (methods||["訪視"])[0];
+  const [method, setMethod] = useState(defaultMethod);
+  const [date, setDate]     = useState(d7.toISOString().slice(0,10));
+  const [time, setTime]     = useState("");
+  const [note, setNote]     = useState("");
+  return (
+    <div className="overlay center" onClick={onClose}>
+      <div className="sheet center" onClick={e=>e.stopPropagation()}>
+        <div className="sheet-title">預約訪視</div>
+        <div className="sheet-sub" style={{marginBottom:16}}>{c.nick}</div>
+        <label className="inp-label">訪視方式</label>
+        <select className="inp" value={method} onChange={e=>setMethod(e.target.value)}>
+          {(methods||["訪視"]).map(m=><option key={m} value={m}>{m}</option>)}
+        </select>
+        <label className="inp-label">訪視日期</label>
+        <input type="date" className="inp" value={date} min={TODAY} onChange={e=>setDate(e.target.value)}/>
+        <label className="inp-label">時間（選填，不填視為全天）</label>
+        <input type="time" className="inp" value={time} onChange={e=>setTime(e.target.value)}/>
+        <label className="inp-label">備註（選填）</label>
+        <input className="inp" placeholder="地點或注意事項…" value={note} onChange={e=>setNote(e.target.value)} maxLength={60}/>
+        <div className="btn-row">
+          <button className="act-btn" onClick={onClose}>取消</button>
+          <button className="act-btn primary" disabled={!date} onClick={()=>{onSave(c.id,method,date,time,note.trim());onClose();}}>確認預約</button>
+        </div>
       </div>
     </div>
   );
 }
 
-function SettingsPage({ rules, setRules, events, setEvents, displayRange, setDisplayRange, recurring, setRecurring, weekStart, setWeekStart, toast }) {
-  const [sub, setSub] = useState(null);
+function CalendarScreen({ cases, onOpen }){
+  const tp=TODAY.split("-").map(Number);
+  const [year,setYear]   = useState(tp[0]);
+  const [month,setMonth] = useState(tp[1]-1);
+  const [sel,setSel]     = useState(TODAY);
+  const wrapRef = useRef(null);
 
-  if (sub === "status")    return <StatusSettings    onBack={() => setSub(null)} toast={toast} />;
-  if (sub === "keywords")  return <KeywordSettings   rules={rules} setRules={setRules} onBack={() => setSub(null)} toast={toast} />;
-  if (sub === "timerange") return <TimeRangeSettings displayRange={displayRange} setDisplayRange={setDisplayRange} onBack={() => setSub(null)} toast={toast} />;
-  if (sub === "weekstart") return <WeekStartSettings weekStart={weekStart} setWeekStart={setWeekStart} onBack={() => setSub(null)} toast={toast} />;
-  if (sub === "gcal")      return <GcalSettings      events={events} setEvents={setEvents} onBack={() => setSub(null)} toast={toast} />;
-  if (sub === "recurring") return <RecurringSettings recurring={recurring} setRecurring={setRecurring} onBack={() => setSub(null)} toast={toast} />;
+  useEffect(()=>{
+    function apply(){
+      if(!wrapRef.current) return;
+      const w=wrapRef.current.offsetWidth;
+      if(w>0) wrapRef.current.style.setProperty("--csz",Math.floor(w/7)+"px");
+    }
+    apply(); window.addEventListener("resize",apply);
+    return ()=>window.removeEventListener("resize",apply);
+  },[]);
 
-  const MENU = [
-    { key:"gcal",      title:"Google Calendar 匯入", desc:"連結並匯入行事曆事件" },
-    { key:"recurring", title:"固定排程",             desc:`${recurring.length} 個固定排程` },
-    { key:"status",    title:"狀態管理",             desc:"自訂狀態名稱與說明文字" },
-    { key:"keywords",  title:"關鍵字規則",           desc:"匯入時自動推薦狀態" },
-    { key:"weekstart",  title:"週起始日",             desc:`目前：週${["一","二","三","四","五","六","日"][weekStart]}` },
-    { key:"timerange",  title:"顯示時間範圍",         desc:`目前 ${String(displayRange.start).padStart(2,"0")}:00 – ${String(displayRange.end).padStart(2,"0")}:00` },
-  ];
+  function prev(){ if(month===0){setYear(y=>y-1);setMonth(11);}else setMonth(m=>m-1); }
+  function next(){ if(month===11){setYear(y=>y+1);setMonth(0);}else setMonth(m=>m+1); }
+
+  const {first,total}=getMonthDays(year,month);
+  const cells=[]; for(let i=0;i<first;i++)cells.push(null); for(let d=1;d<=total;d++)cells.push(d); while(cells.length%7)cells.push(null);
+
+  // Build event map from trackingPlans nextDue dates
+  const eventMap={};
+  cases.filter(c=>!c.archived).forEach(c=>{
+    (c.trackingPlans||[]).forEach(p=>{
+      if(p.nextDue){
+        if(!eventMap[p.nextDue])eventMap[p.nextDue]=[];
+        eventMap[p.nextDue].push({nick:c.nick,time:p.visitTime||"",type:p.name||p.method,id:c.id});
+      }
+    });
+    // No tracking plans = not shown on calendar
+  });
+  const selEvts=eventMap[sel]||[];
 
   return (
-    <div className="page" style={{ paddingTop:26 }}>
-      <div style={{ fontFamily:"var(--font-d)", fontStyle:"italic", fontSize:"1.4rem", marginBottom:20 }}>設定</div>
-      <div className="settings-menu">
-        {MENU.map(({ key, title, desc }) => (
-          <div key={key} className="settings-row" onClick={() => setSub(key)}>
-            <div className="settings-row-body">
-              <div className="settings-row-title">{title}</div>
-              <div className="settings-row-desc">{desc}</div>
-            </div>
-            <span className="settings-row-arrow">›</span>
+    <div className="screen-pad">
+      <div className="cal-nav">
+        <button className="cal-arrow" onClick={prev}>‹</button>
+        <div className="cal-month">{year}年 {MONTH_NAMES[month]}</div>
+        <button className="cal-arrow" onClick={next}>›</button>
+      </div>
+      <div className="cal-wrap" ref={wrapRef} style={{"--csz":"44px"}}>
+        <div className="cal-head">{DOW_NAMES.map(d=><div key={d} className="cal-th">{d}</div>)}</div>
+        <div className="cal-body" style={{gridTemplateRows:`repeat(${cells.length/7},var(--csz,44px))`,height:`calc(var(--csz,44px)*${cells.length/7})`}}>
+          {cells.map((d,i)=>{
+            if(d===null) return <div key={i} className="cal-td empty" style={{width:"var(--csz,44px)",height:"var(--csz,44px)"}}/>;
+            const ds=ymd(year,month,d), evts=eventMap[ds]||[];
+            const cls=["cal-td",ds===TODAY?"today-cell":"",ds===sel&&ds!==TODAY?"selected-cell":""].filter(Boolean).join(" ");
+            return (
+              <div key={ds} className={cls} style={{width:"var(--csz,44px)",height:"var(--csz,44px)"}} onClick={()=>setSel(ds)}>
+                <div className="cal-num">{d}</div>
+                {evts.length>0&&<div className="cal-dots">{evts.slice(0,3).map((e,j)=><div key={j} className="cal-dot" style={{background:"var(--accent)"}}/>)}</div>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div className="day-panel">
+        <div className="day-panel-hd">{sel.slice(5).replace("-","/")} · {selEvts.length===0?"無行程":`${selEvts.length} 項`}</div>
+        {selEvts.length===0&&<div style={{padding:"16px",fontSize:13,color:"var(--muted)"}}>這天沒有排定追蹤</div>}
+        {[...selEvts].sort((a,b)=>(!a.time?-1:!b.time?1:a.time.localeCompare(b.time))).map((e,i)=>(
+          <div className="day-item" key={i} onClick={()=>onOpen(e.id)}>
+            <div className="day-time">{e.time||"—"}</div>
+            <div className="day-nick">{e.nick}</div>
+            <div className="day-meth">{e.type}</div>
           </div>
         ))}
       </div>
@@ -2182,104 +1332,338 @@ function SettingsPage({ rules, setRules, events, setEvents, displayRange, setDis
   );
 }
 
-// ─── Bottom Nav icons — 3 tabs only ───────────────────────────────
-const NAV_ITEMS = [
-  { key:"首頁", label:"首頁", icon:()=>(
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-      <path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z" strokeLinejoin="round"/>
-      <path d="M9 21V12h6v9" strokeLinejoin="round"/>
-    </svg>
-  )},
-  { key:"行程", label:"行程", icon:()=>(
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-      <rect x="3" y="4" width="18" height="18" rx="2" strokeLinejoin="round"/>
-      <path d="M16 2v4M8 2v4M3 10h18" strokeLinecap="round"/>
-      <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01" strokeLinecap="round" strokeWidth="2"/>
-    </svg>
-  )},
-  { key:"設定", label:"設定", icon:()=>(
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-      <circle cx="12" cy="12" r="3"/>
-      <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" strokeLinecap="round"/>
-    </svg>
-  )},
-];
+// ─────────────────────────────────────────────────────────────────────────────
+// SETTINGS PAGES
+// ─────────────────────────────────────────────────────────────────────────────
 
-// ─── App root ──────────────────────────────────────────────────────
-export default function CanWe() {
-  const [loadingVisible, setLoadingVisible] = useState(true);
-  const [onboarded, setOnboarded]   = useState(true);   // assume done until storage says otherwise
-  const [tab, setTab]               = useState("首頁");
-  const [events, setEvents]         = useState(SEED_EVENTS);
-  const [rules, setRules]           = useState(DEFAULT_RULES);
-  const [recurring, setRecurring]   = useState(DEFAULT_RECURRING);
-  const [weekStart, setWeekStart]   = useState(0); // 0=Mon..6=Sun
-  const [displayRange, setDisplayRange] = useState({ start: 8, end: 22 }); // default 08–22
-  const [toastMsg, setToastMsg]     = useState("");
-  const [toastOn, setToastOn]       = useState(false);
+function MethodsPage({ methods, setMethods, onBack }){
+  const [editing,setEditing]=useState(null); const [editVal,setEditVal]=useState(""); const [adding,setAdding]=useState(false); const [newVal,setNewVal]=useState("");
+  function startEdit(i){setEditing(i);setEditVal(methods[i]);setAdding(false);}
+  function saveEdit(){const v=editVal.trim();if(!v){setEditing(null);return;}setMethods(prev=>prev.map((m,i)=>i===editing?v:m));setEditing(null);}
+  function del(i){if(methods.length<=1)return;setMethods(prev=>prev.filter((_,j)=>j!==i));setEditing(null);}
+  function addM(){const v=newVal.trim();if(!v||methods.includes(v))return;setMethods(prev=>[...prev,v]);setNewVal("");setAdding(false);}
+  return (
+    <div className="screen-pad">
+      <div className="ph"><div><button className="back-btn" onClick={onBack}>‹ 設定</button><div className="ph-title">聯絡方式</div></div><button className="ph-action" onClick={()=>{setAdding(true);setEditing(null);}}>＋</button></div>
+      <div className="settings-group">
+        {methods.map((m,i)=>editing===i?(
+          <div key={i} className="settings-row" style={{gap:8,cursor:"default"}}>
+            <input className="inp" style={{flex:1,marginBottom:0,height:36,padding:"0 12px",fontSize:13}} value={editVal} onChange={e=>setEditVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")saveEdit();if(e.key==="Escape")setEditing(null);}} autoFocus/>
+            <button className="act-btn primary" style={{padding:"6px 12px",fontSize:12}} onClick={saveEdit}>存</button>
+            <button className="act-btn danger" style={{padding:"6px 10px",fontSize:12}} onClick={()=>del(i)} disabled={methods.length<=1}>刪</button>
+          </div>
+        ):(
+          <div key={i} className="settings-row" onClick={()=>startEdit(i)}>
+            <span className="s-label">{m}</span><span style={{fontSize:12,color:"var(--accent-mid)"}}>編輯</span>
+          </div>
+        ))}
+        {adding&&(
+          <div className="settings-row" style={{gap:8,cursor:"default"}}>
+            <input className="inp" style={{flex:1,marginBottom:0,height:36,padding:"0 12px",fontSize:13}} placeholder="新聯絡方式…" value={newVal} onChange={e=>setNewVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")addM();if(e.key==="Escape")setAdding(false);}} autoFocus/>
+            <button className="act-btn primary" style={{padding:"6px 12px",fontSize:12}} onClick={addM}>加入</button>
+            <button className="act-btn" style={{padding:"6px 10px",fontSize:12}} onClick={()=>setAdding(false)}>✕</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LevelsPage({ levels, setLevels, methods, onBack }){
+  const safe=methods.length>0?methods:["電話"];
+  const [editKey,setEditKey]=useState(null); const [form,setForm]=useState({}); const [planEdit,setPlanEdit]=useState([]);
+  const [adding,setAdding]=useState(false); const [newForm,setNewForm]=useState({key:"",label:"",days:14,desc:"",colorKey:"yellow"}); const [newPlans,setNewPlans]=useState([]); const [err,setErr]=useState("");
+  const colorOf=k=>LEVEL_COLOR_OPTIONS.find(c=>c.key===k)||LEVEL_COLOR_OPTIONS[1];
+  function loadPlans(k){ try{const r=localStorage.getItem(LS_DPLANS);if(r){const d=JSON.parse(r);return d[k]||[];}}catch{}return[]; }
+  function savePlans(k,t){ try{const r=localStorage.getItem(LS_DPLANS);const d=r?JSON.parse(r):{};d[k]=t;localStorage.setItem(LS_DPLANS,JSON.stringify(d));}catch{} }
+  function startEdit(k){setEditKey(k);setAdding(false);setForm({label:levels[k].label,days:levels[k].days,desc:levels[k].desc||"",colorKey:levels[k].colorKey||"yellow"});setPlanEdit(loadPlans(k));}
+  function saveEdit(){if(!form.label?.trim())return;setLevels(prev=>({...prev,[editKey]:{...prev[editKey],label:form.label.trim(),days:Math.max(1,Number(form.days)||7),desc:(form.desc||"").trim(),colorKey:form.colorKey}}));savePlans(editKey,planEdit);setEditKey(null);}
+  function delLevel(k){if(Object.keys(levels).length<=1)return;setLevels(prev=>{const n={...prev};delete n[k];return n;});setEditKey(null);}
+  function startAdd(){setAdding(true);setEditKey(null);setNewForm({key:"",label:"",days:14,desc:"",colorKey:"yellow"});setNewPlans([]);setErr("");}
+  function saveAdd(){const k=newForm.key.trim().toUpperCase();if(!k||!newForm.label.trim()){setErr("請填寫 ID 和名稱");return;}if(levels[k]){setErr(`ID「${k}」已存在`);return;}setLevels(prev=>({...prev,[k]:{label:newForm.label.trim(),days:Math.max(1,Number(newForm.days)||14),desc:(newForm.desc||"").trim(),colorKey:newForm.colorKey}}));savePlans(k,newPlans);setAdding(false);setErr("");}
+  return (
+    <div className="screen-pad">
+      <div className="ph"><div><button className="back-btn" onClick={onBack}>‹ 設定</button><div className="ph-title">關懷等級管理</div></div><button className="ph-action" onClick={startAdd}>＋</button></div>
+      <div className="settings-group">
+        {Object.entries(levels).map(([k,l])=>{
+          const col=colorOf(l.colorKey||"yellow"); const plans=loadPlans(k);
+          if(editKey===k) return (
+            <div key={k} style={{background:"var(--bg)",padding:"14px 16px",borderBottom:"1px solid var(--border)"}}>
+              <label className="inp-label">名稱</label><input className="inp" value={form.label} onChange={e=>setForm(x=>({...x,label:e.target.value}))} autoFocus/>
+              <label className="inp-label">頻率說明</label><input className="inp" value={form.desc} placeholder="例：每週一次" onChange={e=>setForm(x=>({...x,desc:e.target.value}))}/>
+              <label className="inp-label">間隔天數</label><input className="inp" type="number" min={1} value={form.days} onChange={e=>setForm(x=>({...x,days:e.target.value}))}/>
+              <label className="inp-label">顏色</label>
+              <div className="opt-row" style={{marginBottom:12}}>
+                {LEVEL_COLOR_OPTIONS.map(c=><div key={c.key} className={`opt ${form.colorKey===c.key?"active":""}`} style={form.colorKey===c.key?{background:c.bg,borderColor:c.color,color:c.color}:{}} onClick={()=>setForm(x=>({...x,colorKey:c.key}))}>{c.label}</div>)}
+              </div>
+              <div style={{borderTop:"1px solid var(--border)",marginBottom:12,paddingTop:12}}>
+                <TrackingPlanEditor plans={planEdit} setPlans={setPlanEdit} methods={safe}/>
+              </div>
+              <div style={{display:"flex",gap:6}}>
+                <button className="act-btn primary" style={{flex:2,padding:"8px 0",fontSize:13}} onClick={saveEdit}>儲存</button>
+                {Object.keys(levels).length>1&&<button className="act-btn danger" style={{flex:1,padding:"8px 0",fontSize:13}} onClick={()=>delLevel(k)}>刪除</button>}
+                <button className="act-btn" style={{flex:1,padding:"8px 0",fontSize:13}} onClick={()=>setEditKey(null)}>取消</button>
+              </div>
+            </div>
+          );
+          return (
+            <div key={k} className="settings-row" onClick={()=>startEdit(k)}>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4,background:col.bg,color:col.color,letterSpacing:".02em"}}>{l.label}</span>
+                <div>
+                  <div className="s-label">{l.desc||l.label}</div>
+                  <div className="s-sub">每 {l.days} 天{plans.length>0?" · "+plans.map(p=>`${p.name||p.method}`).join("、"):""}</div>
+                </div>
+              </div>
+              <span style={{fontSize:12,color:"var(--accent-mid)"}}>編輯</span>
+            </div>
+          );
+        })}
+        {adding&&(
+          <div style={{background:"var(--bg)",padding:"14px 16px",borderBottom:"1px solid var(--border)"}}>
+            <label className="inp-label">名稱</label><input className="inp" placeholder="例：高風險" value={newForm.label} onChange={e=>setNewForm(f=>({...f,label:e.target.value}))} autoFocus/>
+            <label className="inp-label">頻率說明</label><input className="inp" placeholder="例：每月兩次" value={newForm.desc} onChange={e=>setNewForm(f=>({...f,desc:e.target.value}))}/>
+            <label className="inp-label">間隔天數</label><input className="inp" type="number" min={1} value={newForm.days} onChange={e=>setNewForm(f=>({...f,days:e.target.value}))}/>
+            <label className="inp-label">顏色</label>
+            <div className="opt-row" style={{marginBottom:8}}>
+              {LEVEL_COLOR_OPTIONS.map(c=><div key={c.key} className={`opt ${newForm.colorKey===c.key?"active":""}`} style={newForm.colorKey===c.key?{background:c.bg,borderColor:c.color,color:c.color}:{}} onClick={()=>setNewForm(f=>({...f,colorKey:c.key}))}>{c.label}</div>)}
+            </div>
+            <label className="inp-label">識別碼（英文，如 A / B）</label><input className="inp" placeholder="例：H" value={newForm.key} onChange={e=>setNewForm(f=>({...f,key:e.target.value}))} maxLength={4}/>
+            <div style={{borderTop:"1px solid var(--border)",marginBottom:12,paddingTop:12}}>
+              <TrackingPlanEditor plans={newPlans} setPlans={setNewPlans} methods={safe}/>
+            </div>
+            {err&&<div className="inp-err">{err}</div>}
+            <div style={{display:"flex",gap:6}}>
+              <button className="act-btn primary" style={{flex:2,padding:"8px 0",fontSize:13}} onClick={saveAdd}>建立</button>
+              <button className="act-btn" style={{flex:1,padding:"8px 0",fontSize:13}} onClick={()=>{setAdding(false);setErr("");}}>取消</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ReminderPage({ onBack }){
+  const PRESETS=["08:00","09:00","12:00","13:00","18:00","20:00"];
+  const [times,setTimes]=useState(["09:00"]); const [adding,setAdding]=useState(false); const [custom,setCustom]=useState("09:00");
+  function addTime(t){if(!times.includes(t))setTimes(prev=>[...prev,t].sort());setAdding(false);}
+  function removeTime(t){if(times.length>1)setTimes(prev=>prev.filter(x=>x!==t));}
+  return (
+    <div className="screen-pad">
+      <div className="ph"><div><button className="back-btn" onClick={onBack}>‹ 設定</button><div className="ph-title">提醒設定</div></div></div>
+      <div className="settings-group">
+        {times.map(t=>(
+          <div key={t} className="settings-row">
+            <span className="s-label" style={{fontVariantNumeric:"tabular-nums"}}>{t}</span>
+            <button className="act-btn danger" style={{padding:"4px 10px",fontSize:12}} onClick={()=>removeTime(t)} disabled={times.length<=1}>移除</button>
+          </div>
+        ))}
+        <div className="settings-row" style={{cursor:"default"}}>
+          <button className="act-btn" style={{width:"100%",padding:"9px 0",textAlign:"center",fontSize:13}} onClick={()=>setAdding(!adding)}>{adding?"取消":"＋ 新增提醒時間"}</button>
+        </div>
+        {adding&&(
+          <div style={{padding:"12px 16px",background:"var(--bg)",borderTop:"1px solid var(--border)"}}>
+            <div className="opt-row" style={{marginBottom:10}}>
+              {PRESETS.filter(p=>!times.includes(p)).map(p=><div key={p} className="opt" style={{minWidth:60}} onClick={()=>addTime(p)}>{p}</div>)}
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <input type="time" className="inp" style={{flex:1,marginBottom:0}} value={custom} onChange={e=>setCustom(e.target.value)}/>
+              <button className="act-btn primary" style={{padding:"0 16px"}} onClick={()=>addTime(custom)}>加入</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ArchivedPage({ cases, updateCase, onBack, showToast }){
+  const [uid,setUid]=useState(null);
+  const archived=[...cases].filter(c=>c.archived).sort((a,b)=>new Date(b.archivedAt||0)-new Date(a.archivedAt||0));
+  return (
+    <div className="screen-pad">
+      <div className="ph"><div><button className="back-btn" onClick={onBack}>‹ 設定</button><div className="ph-title">封存的個案</div></div></div>
+      {archived.length===0&&<div className="empty">目前沒有封存的個案</div>}
+      {archived.map(c=>(
+        <div key={c.id}>
+          <div className="card-row" style={{cursor:"default"}}>
+            <div className="row-main">
+              <div className="row-nick">{c.nick}</div>
+              <div className="row-meta">最後聯絡：{c.lastContact?.slice(5)||"—"} · 封存：{c.archivedAt?new Date(c.archivedAt).toLocaleDateString("zh-TW"):"—"}</div>
+            </div>
+            <button className="act-btn" style={{fontSize:12,padding:"5px 12px",flexShrink:0}} onClick={()=>setUid(uid===c.id?null:c.id)}>解除封存</button>
+          </div>
+          {uid===c.id&&(
+            <div style={{margin:"-8px 16px 10px",background:"var(--green-bg)",border:"1px solid #A8D8BC",borderRadius:"0 0 var(--r) var(--r)",padding:"12px 14px"}}>
+              <div style={{fontSize:13,fontWeight:500,marginBottom:4}}>解除封存「{c.nick}」？</div>
+              <div style={{fontSize:12,color:"var(--muted)",lineHeight:1.6,marginBottom:10}}>解除後將重新出現在個案管理，並恢復追蹤提醒。</div>
+              <div style={{display:"flex",gap:6}}>
+                <button className="act-btn" style={{flex:1}} onClick={()=>setUid(null)}>取消</button>
+                <button className="act-btn primary" style={{flex:1}} onClick={()=>{updateCase(c.id,()=>({archived:false,archivedAt:null}));setUid(null);showToast(`已解除封存 ${c.nick}`);}}>解除封存</button>
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ExportCenterPage({ cases, levels, methods, onBack, showToast }){
+  function dl(content,filename,type){const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=filename;a.click();URL.revokeObjectURL(url);}
+  function exportCSV(){
+    const header=["暱稱","編號","等級","上次聯絡","備註","追蹤計畫"];
+    const rows=cases.map(c=>[c.nick??"",c.id??"",levels[c.level]?.label||c.level||"",c.lastContact??"",c.note??"",(c.trackingPlans||[]).map(p=>`${p.name||p.method}/${FREQ_OPTIONS.find(f=>f.key===p.freq)?.label||p.freq}/${p.timesPerPeriod}次`).join("; ")]);
+    dl("\uFEFF"+[header,...rows].map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n"),"ReCon_export.csv","text/csv;charset=utf-8;");
+    showToast("已匯出 CSV");
+  }
+  function exportCanWe(){
+    const payload={version:"1.0",source:"ReCon",exportedAt:new Date().toISOString(),contacts:cases.map(c=>({name:c.nick??"",phone:"",level:levels[c.level]?.label??c.level??"",nextContactDate:c.trackingPlans?.[0]?.nextDue??"",notes:c.note??"",trackingPlans:(c.trackingPlans||[]),history:(c.logs??[]).map(l=>({date:l.date??"",method:l.method??"",note:l.note??""}))}))};
+    dl(JSON.stringify(payload,null,2),"recon_canwe_export.json","application/json;charset=utf-8;");
+    showToast("已匯出 CanWe 相容檔案");
+  }
+  function exportBackup(){
+    const payload={version:"15.0",source:"ReCon",exportedAt:new Date().toISOString(),cases,levels,methods};
+    dl(JSON.stringify(payload,null,2),`ReCon_backup_${new Date().toISOString().slice(0,10)}.json`,"application/json;charset=utf-8;");
+    showToast("已匯出完整備份");
+  }
+  return (
+    <div className="screen-pad">
+      <div className="ph"><div><button className="back-btn" onClick={onBack}>‹ 設定</button><div className="ph-title">資料匯出中心</div></div></div>
+      <div className="settings-group">
+        <div className="settings-row" onClick={exportCSV}><div><div className="s-label">匯出 CSV</div><div className="s-sub">個案列表，可用 Excel 開啟</div></div><span className="s-arrow">↓</span></div>
+        <div className="settings-row" onClick={exportCanWe}><div><div className="s-label">匯出 CanWe 格式</div><div className="s-sub">JSON，可於 CanWe 匯入使用</div></div><span className="s-arrow">↓</span></div>
+        <div className="settings-row" onClick={exportBackup}><div><div className="s-label">完整資料備份</div><div className="s-sub">個案、追蹤計畫、設定，JSON 格式</div></div><span className="s-arrow">↓</span></div>
+      </div>
+      <div style={{padding:"12px 22px",fontSize:12,color:"var(--muted)",lineHeight:1.7}}>未來將陸續支援 Excel、PDF、Google Calendar 等格式。</div>
+    </div>
+  );
+}
+
+function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateCase, showToast, theme, setTheme }){
+  const [page,setPage]=useState("hub");
+  if(page==="methods")  return <MethodsPage  methods={methods} setMethods={setMethods} onBack={()=>setPage("hub")}/>;
+  if(page==="levels")   return <LevelsPage   levels={levels}   setLevels={setLevels}   methods={methods} onBack={()=>setPage("hub")}/>;
+  if(page==="reminder") return <ReminderPage onBack={()=>setPage("hub")}/>;
+  if(page==="archived") return <ArchivedPage cases={cases} updateCase={updateCase} onBack={()=>setPage("hub")} showToast={showToast}/>;
+  if(page==="export")   return <ExportCenterPage cases={cases} levels={levels} methods={methods} onBack={()=>setPage("hub")} showToast={showToast}/>;
+  return (
+    <div className="screen-pad">
+      <div className="ph"><div><div className="ph-eyebrow">ReCon｜再聯絡</div><div className="ph-title">設定</div></div></div>
+      <div className="sec-label">個案</div>
+      <div className="settings-group">
+        <div className="settings-row" onClick={()=>setPage("archived")}>
+          <div><div className="s-label">封存的個案</div><div className="s-sub">{cases.filter(c=>c.archived).length} 個</div></div>
+          <span className="s-arrow">›</span>
+        </div>
+      </div>
+      <div className="sec-label">管理</div>
+      <div className="settings-group">
+        <div className="settings-row" onClick={()=>setPage("methods")}><div><div className="s-label">聯絡方式管理</div><div className="s-sub">{methods.length} 種方式</div></div><span className="s-arrow">›</span></div>
+        <div className="settings-row" onClick={()=>setPage("levels")}><div><div className="s-label">關懷等級管理</div><div className="s-sub">{Object.keys(levels).length} 個等級（含預設追蹤計畫）</div></div><span className="s-arrow">›</span></div>
+        <div className="settings-row" onClick={()=>setPage("reminder")}><div className="s-label">提醒設定</div><span className="s-arrow">›</span></div>
+      </div>
+      <div className="sec-label">資料</div>
+      <div className="settings-group">
+        <div className="settings-row" onClick={()=>setPage("export")}><div className="s-label">資料匯出中心</div><span className="s-arrow">›</span></div>
+      </div>
+      <div className="sec-label">顯示</div>
+      <div className="settings-group">
+        <div className="settings-row static">
+          <div><div className="s-label">外觀模式</div><div className="s-sub">{theme==="dark"?"深色":"淺色"}</div></div>
+          <div style={{display:"flex",gap:8}}>
+            <button className={`act-btn ${theme!=="dark"?"primary":""}`} style={{padding:"5px 14px",fontSize:12}} onClick={()=>setTheme("light")}>淺色</button>
+            <button className={`act-btn ${theme==="dark"?"primary":""}`} style={{padding:"5px 14px",fontSize:12}} onClick={()=>setTheme("dark")}>深色</button>
+          </div>
+        </div>
+      </div>
+      <div className="sec-label">關於</div>
+      <div className="settings-group">
+        <div className="settings-row static">
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
+            <span className="s-label">ReCon｜再聯絡</span>
+          </div>
+          <span className="s-val">v15.23</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// APP ROOT
+// ─────────────────────────────────────────────────────────────────────────────
+
+export default function App(){
+  const [cases,   setCases]   = useState(()=>lsGet(LS.cases,   makeInitialCases()));
+  const [methods, setMethods] = useState(()=>lsGet(LS.methods, INITIAL_METHODS));
+  const [levels,  setLevels]  = useState(()=>lsGet(LS.levels,  INITIAL_LEVELS));
+  const [theme,   setThemeRaw]= useState(()=>{ try{return localStorage.getItem(LS.theme)||"light"}catch{return "light"} });
+  function setTheme(t){ setThemeRaw(t); try{localStorage.setItem(LS.theme,t)}catch{} }
+  const [tab,     setTab]     = useState("home");
+  const [detailId,setDetailId]= useState(null);
+  const [toast,   setToast]   = useState(null);
+  const [addOpen, setAddOpen] = useState(false);
   const toastTimer = useRef(null);
 
-  useEffect(() => {
-    injectCSS();
+  useEffect(()=>{ lsSet(LS.cases,   cases);   },[cases]);
+  useEffect(()=>{ lsSet(LS.methods, methods); },[methods]);
+  useEffect(()=>{ lsSet(LS.levels,  levels);  },[levels]);
+  useEffect(()=>{ document.title="ReCon｜再聯絡"; },[]);
 
-    // Load persisted range + onboarding flag from storage
-    (async () => {
-      const [wasOnboarded, savedRange] = await Promise.all([loadOnboarded(), loadRange()]);
-      if (savedRange) setDisplayRange(savedRange);
-      setOnboarded(wasOnboarded);
-      setTimeout(() => setLoadingVisible(false), 2100);
-    })();
-  }, []);
-
-  const toast = (msg) => {
-    setToastMsg(msg); setToastOn(true);
-    clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToastOn(false), 2400);
-  };
-
-  const handleOnboardDone = (range) => {
-    setDisplayRange(range);
-    setOnboarded(true);
-  };
-
-  // Show onboarding after loading screen
-  if (!loadingVisible && !onboarded) {
-    return (
-      <>
-        <div className={`ls ${loadingVisible?"":"hidden"}`}>
-          <div className="ls-title">Can we…?</div>
-          <div className="ls-sub">讓時間自己說話</div>
-          <div className="ls-pip" />
-        </div>
-        <Onboarding onDone={handleOnboardDone} />
-      </>
-    );
+  function updateCase(id, patchFn){
+    setCases(prev=>{
+      const next=prev.map(c=>{
+        if(c.id!==id) return c;
+        try{
+          const patch=patchFn(c);
+          if(patch===null) return null;
+          return {
+            ...c, ...patch,
+            lastContact:  patch.lastContact  || c.lastContact  || TODAY,
+            logs:         Array.isArray(patch.logs) ? patch.logs : (c.logs||[]),
+            trackingPlans: patch.hasOwnProperty("trackingPlans") ? patch.trackingPlans : (c.trackingPlans||[]),
+          };
+        }catch(e){console.error(e);return c;}
+      });
+      return next.filter(Boolean);
+    });
   }
+
+  function addCase(nc){ setCases(prev=>[...prev,nc]); showToast(`已新增 ${nc.nick}`); }
+  function deleteCase(id){ setCases(prev=>prev.filter(c=>c.id!==id)); showToast("已刪除"); if(detailId===id){setDetailId(null);setTab("cases");} }
+  function showToast(msg){ setToast(msg); clearTimeout(toastTimer.current); toastTimer.current=setTimeout(()=>setToast(null),1900); }
+  function openCase(id){ setDetailId(id); setTab("detail"); }
+  function closeDetail(){ setDetailId(null); setTab("cases"); }
+
+  const detailCase=cases.find(c=>c.id===detailId)??null;
+  const NAV=[{key:"home",icon:"◦",label:"今日"},{key:"cases",icon:"≡",label:"個案"},{key:"calendar",icon:"□",label:"行事曆"},{key:"settings",icon:"⊙",label:"設定"}];
 
   return (
     <>
-      <div className={`ls ${loadingVisible?"":"hidden"}`}>
-        <div className="ls-title">Can we…?</div>
-        <div className="ls-sub">讓時間自己說話</div>
-        <div className="ls-pip" />
+      <style>{css}</style>
+      <div className="shell" data-theme={theme}>
+        <div className="screen">
+          {tab==="home"     &&<HomeScreen     cases={cases} methods={methods} levels={levels} updateCase={updateCase} showToast={showToast} theme={theme} setTheme={setTheme}/>}
+          {tab==="cases"    &&<CasesScreen    cases={cases} methods={methods} levels={levels} onAdd={()=>setAddOpen(true)} onOpen={openCase} updateCase={updateCase} deleteCase={deleteCase} showToast={showToast}/>}
+          {tab==="detail"   &&detailCase&&<DetailScreen case_={detailCase} methods={methods} levels={levels} onBack={closeDetail} updateCase={updateCase} showToast={showToast}/>}
+          {tab==="calendar" &&<CalendarScreen cases={cases} onOpen={openCase}/>}
+          {tab==="settings" &&<SettingsScreen cases={cases} methods={methods} setMethods={setMethods} levels={levels} setLevels={setLevels} updateCase={updateCase} showToast={showToast}/>}
+        </div>
+        {addOpen&&<AddCaseModal existingCases={cases} levels={levels} methods={methods} onClose={()=>setAddOpen(false)} onSave={nc=>{addCase(nc);setAddOpen(false);}}/>}
+        {toast&&<Toast msg={toast}/>}
+        <div className="bnav">
+          {NAV.map(n=>(
+            <button key={n.key} className={`bnav-btn ${(tab===n.key||(tab==="detail"&&n.key==="cases"))?"active":""}`}
+              onClick={()=>{setTab(n.key);setDetailId(null);}}>
+              <span className="bnav-icon">{n.icon}</span>
+              <span className="bnav-label">{n.label}</span>
+            </button>
+          ))}
+        </div>
       </div>
-
-      <div className="app">
-        {tab==="首頁" && <HomePage events={events} displayRange={displayRange} setTab={setTab} toast={toast} />}
-        {tab==="行程" && <EventsPage events={events} setEvents={setEvents} displayRange={displayRange} weekStart={weekStart} toast={toast} />}
-        {tab==="設定" && <SettingsPage rules={rules} setRules={setRules} events={events} setEvents={setEvents} displayRange={displayRange} setDisplayRange={setDisplayRange} recurring={recurring} setRecurring={setRecurring} weekStart={weekStart} setWeekStart={setWeekStart} toast={toast} />}
-      </div>
-
-      <nav className="bnav">
-        {NAV_ITEMS.map(({ key, label, icon }) => (
-          <button key={key} className={`bnav-tab ${tab===key?"on":""}`} onClick={() => setTab(key)}>
-            {icon()}
-            {label}
-          </button>
-        ))}
-      </nav>
-
-      <div className={`toast ${toastOn?"show":""}`}>{toastMsg}</div>
     </>
   );
 }
