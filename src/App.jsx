@@ -575,7 +575,8 @@ function LogModal({ case_:c, methods, onClose, onSave }){
   const plans = c.trackingPlans||[];
   const nowH = new Date();
   const defaultTime = `${String(nowH.getHours()).padStart(2,"0")}:${String(nowH.getMinutes()).padStart(2,"0")}`;
-  const [method, setMethod] = useState(safe[0]);
+  // 初始值一致：若有追蹤任務，預設聯絡方式對應第一個任務的方式
+  const [method, setMethod] = useState(plans[0]?.method || safe[0]);
   const [planId, setPlanId] = useState(plans[0]?.id||null);
   const [date,   setDate]   = useState(TODAY);
   const [time,   setTime]   = useState(defaultTime);
@@ -583,7 +584,14 @@ function LogModal({ case_:c, methods, onClose, onSave }){
 
   function onMethodChange(m){
     setMethod(m);
-    // 不自動切換 planId — 使用者可自由選擇聯絡方式與追蹤任務的對應
+    // 切換聯絡方式時，自動對應到同方式的追蹤任務；若無對應任務則取消關聯
+    const match = plans.find(p=>p.method===m);
+    setPlanId(match ? match.id : null);
+  }
+  function onPlanChange(p){
+    setPlanId(p?p.id:null);
+    // 選追蹤任務時，自動同步聯絡方式
+    if(p) setMethod(p.method);
   }
 
   return (
@@ -609,7 +617,7 @@ function LogModal({ case_:c, methods, onClose, onSave }){
             <div style={{marginBottom:14}}>
               {plans.map(p=>(
                 <div key={p.id} className="plan-pick-row"
-                  onClick={()=>{ setPlanId(p.id); }}>
+                  onClick={()=>onPlanChange(p)}>
                   <div>
                     <div style={{fontSize:13,fontWeight:500}}>{p.name||p.method}</div>
                     <div style={{fontSize:11,color:"var(--muted)"}}>{p.method} · {FREQ_OPTIONS.find(f=>f.key===p.freq)?.label}</div>
@@ -619,7 +627,7 @@ function LogModal({ case_:c, methods, onClose, onSave }){
                   </div>
                 </div>
               ))}
-              <div className="plan-pick-row" onClick={()=>setPlanId(null)}>
+              <div className="plan-pick-row" onClick={()=>onPlanChange(null)}>
                 <div style={{fontSize:13,color:"var(--muted)"}}>不關聯追蹤任務</div>
                 <div style={{width:20,height:20,borderRadius:"50%",border:`2px solid ${planId===null?"var(--accent)":"var(--border)"}`,background:planId===null?"var(--accent)":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                   {planId===null&&<div style={{width:8,height:8,borderRadius:"50%",background:"#fff"}}/>}
@@ -1546,7 +1554,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.17</span>
+          <span className="s-val">v15.18</span>
         </div>
       </div>
     </div>
