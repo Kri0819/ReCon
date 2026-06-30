@@ -322,12 +322,12 @@ function calcPlanNextDue(plan, fromDate) {
 // Get period start for a plan (for counting completions)
 function getPeriodStart(freq){
   const now=new Date(TODAY);
-  if(freq==="weekly"){ const d=new Date(now); d.setDate(now.getDate()-now.getDay()); return dateStr(d); }
+  // 本週起點：當週週日
+  const weekStart=new Date(now); weekStart.setDate(now.getDate()-now.getDay());
+  if(freq==="weekly") return dateStr(weekStart);
   if(freq==="biweekly"){
-    const ys=new Date(now.getFullYear(),0,1);
-    const wk=Math.floor((now-ys)/604800000);
-    const bwk=Math.floor(wk/2)*2;
-    const d=new Date(ys); d.setDate(1+bwk*7); return dateStr(d);
+    // 當週週日算第1天，往後算14天（即直接以本週週日為雙週起點）
+    return dateStr(weekStart);
   }
   if(freq==="quarterly"){
     const m=now.getMonth(); const q=Math.floor(m/3)*3;
@@ -1570,7 +1570,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.20</span>
+          <span className="s-val">v15.21</span>
         </div>
       </div>
     </div>
