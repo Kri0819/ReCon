@@ -929,8 +929,6 @@ function CasesScreen({ cases, methods, levels, onAdd, onOpen, updateCase, delete
                   </div>
                 );
               })()}
-                </div>
-              </div>
             </div>
             {isDelConf&&(
               <div className="del-confirm">
