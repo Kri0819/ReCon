@@ -1052,6 +1052,7 @@ function EditLogPanel({ log, methods, onClose, onSave, onDelete }) {
 function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast }){
   const [logModal,       setLogModal]       = useState(false);
   const [visitModal,     setVisitModal]     = useState(false);
+  const [editVisitPlan,  setEditVisitPlan]  = useState(null);
   const [editLogIdx,     setEditLogIdx]     = useState(null); // index of log being edited
   const [archiveConfirm, setArchiveConfirm] = useState(false);
   const [editModal,      setEditModal]      = useState(false);
@@ -1113,8 +1114,9 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
                   <span style={{
                     fontSize:12,color:"var(--accent)",fontWeight:500,
                     border:"1px solid var(--accent)",borderRadius:8,
-                    padding:"3px 10px",display:"inline-block"
-                  }}>
+                    padding:"3px 10px",display:"inline-block",cursor:"pointer"
+                  }}
+                  onClick={()=>setEditVisitPlan(r)}>
                     下次 {r.nextDue.slice(5)}{r.visitTime?" "+r.visitTime:""}
                   </span>
                   <button className="act-btn danger" style={{fontSize:11,padding:"3px 8px",flexShrink:0}}
@@ -1214,6 +1216,21 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
           }));
           showToast(`已預約${method} ${date.slice(5)}${time?" "+time:""}`);
         }}/>}
+      {editVisitPlan&&<VisitModal case_={c} methods={methods} editPlan={editVisitPlan} onClose={()=>setEditVisitPlan(null)}
+        onSave={(id,method,date,time,note)=>{
+          updateCase(id,prev=>({
+            trackingPlans:(prev.trackingPlans||[]).map(p=>
+              p.id===editVisitPlan.id?{...p,nextDue:date,visitTime:time||"",visitNote:note||""}:p),
+          }));
+          showToast(`已更新預約 ${date.slice(5)}${time?" "+time:""}`);
+        }}
+        onCancel={()=>{
+          updateCase(c.id,prev=>({
+            trackingPlans:(prev.trackingPlans||[]).map(p=>
+              p.id===editVisitPlan.id?{...p,nextDue:null,visitTime:""}:p)
+          }));
+          showToast("已取消預約");
+        }}/>}
       {editModal&&<EditCaseModal case_={c} methods={methods} levels={levels}
         onClose={()=>setEditModal(false)} onSave={handleEditSave}
         onDelete={(id)=>{updateCase(id,()=>null);onBack();}}/>}
@@ -1226,21 +1243,22 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
 // ─────────────────────────────────────────────────────────────────────────────
 
 
-function VisitModal({ case_:c, methods, onClose, onSave }) {
+function VisitModal({ case_:c, methods, editPlan, onClose, onSave, onCancel }) {
   const d7 = new Date(TODAY); d7.setDate(d7.getDate()+7);
   const visitMethods = (methods||[]).filter(m=>["訪視","家訪","訪談","學校訪談"].includes(m));
-  const defaultMethod = visitMethods.length>0 ? visitMethods[0] : (methods||["訪視"])[0];
+  const defaultMethod = editPlan?.method || (visitMethods.length>0 ? visitMethods[0] : (methods||["訪視"])[0]);
   const [method, setMethod] = useState(defaultMethod);
-  const [date, setDate]     = useState(d7.toISOString().slice(0,10));
-  const [time, setTime]     = useState("");
-  const [note, setNote]     = useState("");
+  const [date, setDate]     = useState(editPlan?.nextDue || d7.toISOString().slice(0,10));
+  const [time, setTime]     = useState(editPlan?.visitTime || "");
+  const [note, setNote]     = useState(editPlan?.visitNote || "");
+  const isEdit = !!editPlan;
   return (
     <div className="overlay center" onClick={onClose}>
       <div className="sheet center" onClick={e=>e.stopPropagation()}>
-        <div className="sheet-title">預約訪視</div>
-        <div className="sheet-sub" style={{marginBottom:16}}>{c.nick}</div>
+        <div className="sheet-title">{isEdit?"編輯預約":"預約訪視"}</div>
+        <div className="sheet-sub" style={{marginBottom:16}}>{c.nick}{isEdit?` · ${editPlan.name||editPlan.method}`:""}</div>
         <label className="inp-label">訪視方式</label>
-        <select className="inp" value={method} onChange={e=>setMethod(e.target.value)}>
+        <select className="inp" value={method} onChange={e=>setMethod(e.target.value)} disabled={isEdit}>
           {(methods||["訪視"]).map(m=><option key={m} value={m}>{m}</option>)}
         </select>
         <label className="inp-label">訪視日期</label>
@@ -1250,8 +1268,9 @@ function VisitModal({ case_:c, methods, onClose, onSave }) {
         <label className="inp-label">備註（選填）</label>
         <input className="inp" placeholder="地點或注意事項…" value={note} onChange={e=>setNote(e.target.value)} maxLength={60}/>
         <div className="btn-row">
-          <button className="act-btn" onClick={onClose}>取消</button>
-          <button className="act-btn primary" disabled={!date} onClick={()=>{onSave(c.id,method,date,time,note.trim());onClose();}}>確認預約</button>
+          {isEdit&&<button className="act-btn danger" style={{flex:"0 0 auto",padding:"0 14px"}} onClick={()=>{onCancel();onClose();}}>取消預約</button>}
+          <button className="act-btn" onClick={onClose}>{isEdit?"返回":"取消"}</button>
+          <button className="act-btn primary" disabled={!date} onClick={()=>{onSave(c.id,method,date,time,note.trim());onClose();}}>{isEdit?"儲存變更":"確認預約"}</button>
         </div>
       </div>
     </div>
@@ -1585,7 +1604,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.23</span>
+          <span className="s-val">v15.24</span>
         </div>
       </div>
     </div>
