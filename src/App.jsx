@@ -1053,6 +1053,7 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
   const [logModal,       setLogModal]       = useState(false);
   const [visitModal,     setVisitModal]     = useState(false);
   const [editVisitPlan,  setEditVisitPlan]  = useState(null);
+  const [visitTargetPlan,setVisitTargetPlan]= useState(null);
   const [editLogIdx,     setEditLogIdx]     = useState(null); // index of log being edited
   const [archiveConfirm, setArchiveConfirm] = useState(false);
   const [editModal,      setEditModal]      = useState(false);
@@ -1097,6 +1098,15 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
         <div className="plan-block">
           <div className="plan-block-hd">
             <span>{ts.allDone?"✓ 本期追蹤計畫已完成":"本期追蹤進度"}</span>
+            <span style={{fontSize:11,color:"var(--muted)",fontWeight:500}}>
+              {(()=>{
+                // 若所有任務頻率相同，顯示共用區間；否則顯示第一個任務的區間
+                const freqs=[...new Set(ts.results.map(r=>r.freq))];
+                const f=freqs.length===1?freqs[0]:ts.results[0]?.freq;
+                if(!f) return "";
+                return `${getPeriodStart(f).slice(5).replace("-","/")} – ${getPeriodEnd(f).slice(5).replace("-","/")}`;
+              })()}
+            </span>
           </div>
           {ts.results.map((r,i)=>(
             <div key={i} className="plan-row" style={{flexDirection:"column",alignItems:"stretch",gap:8}}>
@@ -1151,7 +1161,13 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
 
       <div className="det-actions">
         <button className="act-btn primary" onClick={()=>setLogModal(true)}>記錄聯絡</button>
-        <button className="act-btn" onClick={()=>setVisitModal(true)}
+        <button className="act-btn" onClick={()=>{
+          // 若只有一個追蹤任務，直接開啟；若有多個，選第一個尚未預約的任務
+          const plans = c.trackingPlans||[];
+          const target = plans.find(p=>!p.nextDue) || plans[0] || null;
+          setVisitTargetPlan(target);
+          setVisitModal(true);
+        }}
           style={hasMonthVisit?{opacity:.5}:{}}>
           {hasMonthVisit?"本月已訪視":"預約訪視"}
         </button>
@@ -1208,15 +1224,21 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
       ))}
 
       {logModal&&<LogModal case_={c} methods={methods} onClose={()=>setLogModal(false)} onSave={handleLogSave}/>}
-      {visitModal&&<VisitModal case_={c} methods={methods} onClose={()=>setVisitModal(false)}
+      {visitModal&&<VisitModal case_={c} methods={methods} editPlan={visitTargetPlan}
+        onClose={()=>{setVisitModal(false);setVisitTargetPlan(null);}}
         onSave={(id,method,date,time,note)=>{
+          const target = (c.trackingPlans||[]).find(p=>p.method===method && (!visitTargetPlan||p.id===visitTargetPlan.id))
+            || (c.trackingPlans||[]).find(p=>p.method===method);
+          if(target?.nextDue){
+            if(!window.confirm(`「${target.name||target.method}」已有預約 ${target.nextDue.slice(5)}，確定要覆蓋為 ${date.slice(5)}？`)) return;
+          }
           updateCase(id,prev=>({
             trackingPlans:(prev.trackingPlans||[]).map(p=>
-              p.method===method?{...p,nextDue:date,visitTime:time||"",visitNote:note||""}:p),
+              p.method===method && (!target||p.id===target.id)?{...p,nextDue:date,visitTime:time||"",visitNote:note||""}:p),
           }));
           showToast(`已預約${method} ${date.slice(5)}${time?" "+time:""}`);
         }}/>}
-      {editVisitPlan&&<VisitModal case_={c} methods={methods} editPlan={editVisitPlan} onClose={()=>setEditVisitPlan(null)}
+      {editVisitPlan&&<VisitModal case_={c} methods={methods} editPlan={editVisitPlan} lockMethod onClose={()=>setEditVisitPlan(null)}
         onSave={(id,method,date,time,note)=>{
           updateCase(id,prev=>({
             trackingPlans:(prev.trackingPlans||[]).map(p=>
@@ -1243,7 +1265,7 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
 // ─────────────────────────────────────────────────────────────────────────────
 
 
-function VisitModal({ case_:c, methods, editPlan, onClose, onSave, onCancel }) {
+function VisitModal({ case_:c, methods, editPlan, lockMethod, onClose, onSave, onCancel }) {
   const d7 = new Date(TODAY); d7.setDate(d7.getDate()+7);
   const visitMethods = (methods||[]).filter(m=>["訪視","家訪","訪談","學校訪談"].includes(m));
   const defaultMethod = editPlan?.method || (visitMethods.length>0 ? visitMethods[0] : (methods||["訪視"])[0]);
@@ -1258,7 +1280,7 @@ function VisitModal({ case_:c, methods, editPlan, onClose, onSave, onCancel }) {
         <div className="sheet-title">{isEdit?"編輯預約":"預約訪視"}</div>
         <div className="sheet-sub" style={{marginBottom:16}}>{c.nick}{isEdit?` · ${editPlan.name||editPlan.method}`:""}</div>
         <label className="inp-label">訪視方式</label>
-        <select className="inp" value={method} onChange={e=>setMethod(e.target.value)} disabled={isEdit}>
+        <select className="inp" value={method} onChange={e=>setMethod(e.target.value)} disabled={!!lockMethod}>
           {(methods||["訪視"]).map(m=><option key={m} value={m}>{m}</option>)}
         </select>
         <label className="inp-label">訪視日期</label>
@@ -1604,7 +1626,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.24</span>
+          <span className="s-val">v15.25</span>
         </div>
       </div>
     </div>
