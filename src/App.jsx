@@ -343,6 +343,11 @@ function getPeriodEnd(freq){
   const y=s.getFullYear(),m=s.getMonth(); return dateStr(new Date(y,m+1,0));
 }
 
+function getFutureBookings(plan){
+  // bookings[]: [{date, time, note}] 所有未來預約；若舊資料只有 nextDue，退回單筆陣列
+  const list = Array.isArray(plan.bookings) ? plan.bookings.slice() : (plan.nextDue ? [{date:plan.nextDue,time:plan.visitTime||"",note:plan.visitNote||""}] : []);
+  return list.filter(b=>b.date>=TODAY).sort((a,b)=>a.date>b.date?1:a.date<b.date?-1:0);
+}
 function periodLabel(freq){
   return {weekly:"本週", biweekly:"本兩週", monthly:"本月", quarterly:"本季"}[freq] || "本期";
 }
@@ -1054,6 +1059,7 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
   const [visitModal,     setVisitModal]     = useState(false);
   const [editVisitPlan,  setEditVisitPlan]  = useState(null);
   const [visitTargetPlan,setVisitTargetPlan]= useState(null);
+  const [bookingsModal,  setBookingsModal]  = useState(false);
   const [editLogIdx,     setEditLogIdx]     = useState(null); // index of log being edited
   const [archiveConfirm, setArchiveConfirm] = useState(false);
   const [editModal,      setEditModal]      = useState(false);
@@ -1132,10 +1138,16 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
                   <button className="act-btn danger" style={{fontSize:11,padding:"3px 8px",flexShrink:0}}
                     onClick={()=>{
                       updateCase(c.id,prev=>({
-                        trackingPlans:(prev.trackingPlans||[]).map(p=>
-                          p.id===r.id?{...p,nextDue:null,visitTime:""}:p)
+                        trackingPlans:(prev.trackingPlans||[]).map(p=>{
+                          if(p.id!==r.id) return p;
+                          const existing = Array.isArray(p.bookings)?p.bookings:(p.nextDue?[{date:p.nextDue,time:p.visitTime||"",note:p.visitNote||""}]:[]);
+                          const remaining = existing.filter(b=>!(b.date===r.nextDue && (b.time||"")===(r.visitTime||"")));
+                          const sorted = remaining.sort((a,b)=>a.date>b.date?1:a.date<b.date?-1:0);
+                          const nearest = sorted.find(b=>b.date>=TODAY) || sorted[0];
+                          return {...p, bookings:sorted, nextDue:nearest?.date||null, visitTime:nearest?.time||"", visitNote:nearest?.note||""};
+                        })
                       }));
-                      showToast("已取消預約");
+                      showToast("已取消該筆預約");
                     }}>取消預約</button>
                 </div>
               )}
@@ -1146,13 +1158,13 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
 
       <div className="info-grid">
         <div className="info-cell"><div className="info-label">上次聯絡</div><div className="info-val">{c.lastContact?c.lastContact.slice(5).replace("-","/"):"—"}</div></div>
-        <div className="info-cell">
-          <div className="info-label">下次連絡</div>
-          <div className="info-val">
+        <div className="info-cell" style={{cursor:"pointer"}} onClick={()=>setBookingsModal(true)}>
+          <div className="info-label">下次聯絡</div>
+          <div className="info-val" style={{color:"var(--accent)"}}>
             {(()=>{
-              const ts2=getTrackStatus(c);
-              const next=ts2?.results.filter(r=>r.done<r.goal&&r.nextDue).sort((a,b)=>a.nextDue>b.nextDue?1:-1)[0];
-              return next?next.nextDue.slice(5).replace("-","/"):"—";
+              const allBookings = (c.trackingPlans||[]).flatMap(p=>getFutureBookings(p));
+              if(allBookings.length===0) return "—";
+              return allBookings[0].date.slice(5).replace("-","/");
             })()}
           </div>
         </div>
@@ -1241,17 +1253,44 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
       {editVisitPlan&&<VisitModal case_={c} methods={methods} editPlan={editVisitPlan} lockMethod onClose={()=>setEditVisitPlan(null)}
         onSave={(id,method,date,time,note)=>{
           updateCase(id,prev=>({
-            trackingPlans:(prev.trackingPlans||[]).map(p=>
-              p.id===editVisitPlan.id?{...p,nextDue:date,visitTime:time||"",visitNote:note||""}:p),
+            trackingPlans:(prev.trackingPlans||[]).map(p=>{
+              if(p.id!==editVisitPlan.id) return p;
+              const existing = Array.isArray(p.bookings)?p.bookings:(p.nextDue?[{date:p.nextDue,time:p.visitTime||"",note:p.visitNote||""}]:[]);
+              const idx = existing.findIndex(b=>b.date===editVisitPlan.nextDue && (b.time||"")===(editVisitPlan.visitTime||""));
+              const newBookings = idx>=0
+                ? existing.map((b,i)=>i===idx?{date,time:time||"",note:note||""}:b)
+                : [...existing, {date,time:time||"",note:note||""}];
+              const sorted = newBookings.sort((a,b)=>a.date>b.date?1:a.date<b.date?-1:0);
+              const nearest = sorted.find(b=>b.date>=TODAY) || sorted[0];
+              return {...p, bookings:sorted, nextDue:nearest?.date||null, visitTime:nearest?.time||"", visitNote:nearest?.note||""};
+            }),
           }));
           showToast(`已更新預約 ${date.slice(5)}${time?" "+time:""}`);
         }}
         onCancel={()=>{
           updateCase(c.id,prev=>({
-            trackingPlans:(prev.trackingPlans||[]).map(p=>
-              p.id===editVisitPlan.id?{...p,nextDue:null,visitTime:""}:p)
+            trackingPlans:(prev.trackingPlans||[]).map(p=>{
+              if(p.id!==editVisitPlan.id) return p;
+              const existing = Array.isArray(p.bookings)?p.bookings:(p.nextDue?[{date:p.nextDue,time:p.visitTime||"",note:p.visitNote||""}]:[]);
+              const remaining = existing.filter(b=>!(b.date===editVisitPlan.nextDue && (b.time||"")===(editVisitPlan.visitTime||"")));
+              const sorted = remaining.sort((a,b)=>a.date>b.date?1:a.date<b.date?-1:0);
+              const nearest = sorted.find(b=>b.date>=TODAY) || sorted[0];
+              return {...p, bookings:sorted, nextDue:nearest?.date||null, visitTime:nearest?.time||"", visitNote:nearest?.note||""};
+            })
           }));
-          showToast("已取消預約");
+          showToast("已取消該筆預約");
+        }}/>}
+      {bookingsModal&&<BookingsModal case_={c} onClose={()=>setBookingsModal(false)}
+        onAddNew={()=>{
+          setBookingsModal(false);
+          const plans=c.trackingPlans||[];
+          const target=plans.find(p=>!p.nextDue)||plans[0]||null;
+          setVisitTargetPlan(target);
+          setVisitModal(true);
+        }}
+        onEditBooking={(plan,booking)=>{
+          setBookingsModal(false);
+          setEditVisitPlan({...plan, nextDue:booking.date, visitTime:booking.time, visitNote:booking.note});
         }}/>}
       {editModal&&<EditCaseModal case_={c} methods={methods} levels={levels}
         onClose={()=>setEditModal(false)} onSave={handleEditSave}
@@ -1263,6 +1302,50 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
 // ─────────────────────────────────────────────────────────────────────────────
 // CALENDAR SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
+
+
+function BookingsModal({ case_:c, onClose, onAddNew, onEditBooking }){
+  const plans = c.trackingPlans||[];
+  // 攤平所有計畫的所有未來預約，附帶所屬計畫資訊
+  const allBookings = plans.flatMap(p=>
+    getFutureBookings(p).map(b=>({...b, plan:p}))
+  ).sort((a,b)=>a.date>b.date?1:a.date<b.date?-1:(a.time||"").localeCompare(b.time||""));
+
+  return (
+    <div className="overlay center" onClick={onClose}>
+      <div className="sheet center" onClick={e=>e.stopPropagation()}>
+        <div className="sheet-title">未來預約</div>
+        <div className="sheet-sub" style={{marginBottom:16}}>{c.nick}</div>
+
+        {allBookings.length===0 && (
+          <div style={{padding:"16px 0",textAlign:"center",fontSize:13,color:"var(--muted)"}}>目前沒有預約</div>
+        )}
+
+        {allBookings.length>0 && (
+          <div style={{marginBottom:16}}>
+            {allBookings.map((b,i)=>(
+              <div key={i} className="plan-pick-row" style={{cursor:"pointer"}}
+                onClick={()=>onEditBooking(b.plan,b)}>
+                <div>
+                  <div style={{fontSize:13,fontWeight:500}}>{b.plan.name||b.plan.method}</div>
+                  <div style={{fontSize:11,color:"var(--muted)"}}>{b.plan.method}{b.note?` · ${b.note}`:""}</div>
+                </div>
+                <div style={{fontSize:13,fontWeight:600,color:"var(--accent)",flexShrink:0}}>
+                  {b.date.slice(5).replace("-","/")}{b.time?` ${b.time}`:""}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="btn-row">
+          <button className="act-btn" onClick={onClose}>關閉</button>
+          <button className="act-btn primary" onClick={onAddNew}>＋ 新增預約</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 
 function VisitModal({ case_:c, methods, editPlan, lockMethod, onClose, onSave, onCancel }) {
@@ -1626,7 +1709,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.25</span>
+          <span className="s-val">v15.26</span>
         </div>
       </div>
     </div>
