@@ -528,20 +528,6 @@ function TrackingPlanEditor({ plans, setPlans, methods }){
               </div>
             ))}
           </div>
-          {form.freq==="weekly"&&(
-            <>
-              <label className="inp-label">固定星期幾（選填）</label>
-              <div className="opt-row">
-                {DOW_NAMES.map((name,i)=>(
-                  <div key={i} className={`opt ${form.anchorDow===i?"active":""}`}
-                    style={{minWidth:36,flex:"0 0 auto"}}
-                    onClick={()=>setForm(f=>({...f,anchorDow:f.anchorDow===i?null:i}))}>
-                    {name}
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
           <label className="inp-label">目標次數（每期）</label>
           <div className="opt-row">
             {[1,2,3,4].map(n=>(
@@ -1731,7 +1717,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.29</span>
+          <span className="s-val">v15.30</span>
         </div>
       </div>
     </div>
