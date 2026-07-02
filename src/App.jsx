@@ -127,8 +127,8 @@ html,body{height:100%;background:var(--bg);font-family:var(--sans);font-size:14p
 .settings-row:active{background:var(--surface2)}
 .settings-row.static{cursor:default}
 .settings-row.static:active{background:var(--surface)}
-.s-label{font-size:14px;font-weight:400}
-.s-sub{font-size:12px;color:var(--muted);margin-top:1px}
+.s-label{font-size:14px;font-weight:400;color:var(--text)}
+.s-sub{font-size:12px;color:var(--text2);margin-top:1px}
 .s-val{font-size:13px;color:var(--muted)}
 .s-arrow{font-size:16px;color:var(--faint)}
 /* Modals */
@@ -1765,7 +1765,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.35</span>
+          <span className="s-val">v15.36</span>
         </div>
       </div>
     </div>
