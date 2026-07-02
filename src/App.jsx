@@ -26,11 +26,11 @@ const css = `
   --accent:#6B9FD4;--accent-lt:#1A2D44;--accent-mid:#5A8AB8;
 }
 html,body{height:100%;background:var(--bg);font-family:var(--sans);font-size:14px;line-height:1.55;color:var(--text);-webkit-font-smoothing:antialiased}
-.shell{width:100%;min-height:100dvh;max-width:430px;margin:0 auto;background:var(--bg);display:flex;flex-direction:column;position:relative}
+.shell{width:100%;height:100dvh;max-width:430px;margin:0 auto;background:var(--bg);display:flex;flex-direction:column;position:relative;overflow:hidden}
 .screen{flex:1;overflow-y:auto;overflow-x:hidden}
 .screen::-webkit-scrollbar{display:none}
 .screen-pad{padding-bottom:24px}
-.bnav{display:flex;background:rgba(255,255,255,.94);border-top:1px solid var(--border);padding:10px 0 calc(env(safe-area-inset-bottom,0px) + 14px);flex-shrink:0;backdrop-filter:blur(12px)}
+.bnav{display:flex;background:var(--surface);border-top:1px solid var(--border);padding:10px 0 calc(env(safe-area-inset-bottom,0px) + 14px);flex-shrink:0;backdrop-filter:blur(12px);opacity:.97}
 .bnav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;border:none;background:none;cursor:pointer;padding:4px 0;font-family:var(--sans)}
 .bnav-icon{font-size:19px;opacity:.3;transition:opacity .12s}
 .bnav-label{font-size:10px;letter-spacing:.04em;color:var(--muted);font-weight:500}
@@ -1762,7 +1762,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.32</span>
+          <span className="s-val">v15.33</span>
         </div>
       </div>
     </div>
