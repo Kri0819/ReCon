@@ -1355,6 +1355,12 @@ function VisitModal({ case_:c, methods, editPlan, lockMethod, onClose, onSave, o
         <div className="sheet-title">{isEdit?"編輯預約":"預約訪視"}</div>
         <div className="sheet-sub" style={{marginBottom:16}}>{c.nick}{isEdit?` · ${editPlan.name||editPlan.method}`:""}</div>
 
+        <label className="inp-label">日期與時間</label>
+        <div style={{display:"flex",gap:8,marginBottom:14}}>
+          <input type="date" className="inp" style={{flex:1,marginBottom:0}} value={date} min={TODAY} onChange={e=>setDate(e.target.value)}/>
+          <input type="time" className="inp" style={{flex:1,marginBottom:0}} value={time} onChange={e=>setTime(e.target.value)} placeholder="選填，不填視為全天"/>
+        </div>
+
         {!isEdit && plans.length>0 && (
           <>
             <label className="inp-label">追蹤任務</label>
@@ -1367,16 +1373,8 @@ function VisitModal({ case_:c, methods, editPlan, lockMethod, onClose, onSave, o
           <div className="inp-hint" style={{marginTop:-4}}>此個案尚未設定追蹤任務，請先於「編輯」中新增。</div>
         )}
 
-        {selectedPlan && (
-          <>
-            <label className="inp-label">訪視日期</label>
-            <input type="date" className="inp" value={date} min={TODAY} onChange={e=>setDate(e.target.value)}/>
-            <label className="inp-label">時間（選填，不填視為全天）</label>
-            <input type="time" className="inp" value={time} onChange={e=>setTime(e.target.value)}/>
-            <label className="inp-label">備註（選填）</label>
-            <input className="inp" placeholder="地點或注意事項…" value={note} onChange={e=>setNote(e.target.value)} maxLength={60}/>
-          </>
-        )}
+        <label className="inp-label">備註（選填）</label>
+        <input className="inp" placeholder="地點或注意事項…" value={note} onChange={e=>setNote(e.target.value)} maxLength={60}/>
 
         <div className="btn-row">
           {isEdit&&<button className="act-btn danger" style={{flex:"0 0 auto",padding:"0 14px"}} onClick={()=>{onCancel();onClose();}}>取消預約</button>}
@@ -1716,7 +1714,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.27</span>
+          <span className="s-val">v15.28</span>
         </div>
       </div>
     </div>
