@@ -1377,11 +1377,14 @@ function VisitModal({ case_:c, methods, editPlan, lockMethod, onClose, onSave, o
         <input className="inp" placeholder="地點或注意事項…" value={note} onChange={e=>setNote(e.target.value)} maxLength={60}/>
 
         <div className="btn-row">
-          {isEdit&&<button className="act-btn danger" style={{flex:"0 0 auto",padding:"0 14px"}} onClick={()=>{onCancel();onClose();}}>取消預約</button>}
           <button className="act-btn" onClick={onClose}>{isEdit?"返回":"取消"}</button>
           <button className="act-btn primary" disabled={!date||!selectedPlan}
             onClick={()=>{onSave(c.id,planId,date,time,note.trim());onClose();}}>{isEdit?"儲存變更":"確認預約"}</button>
         </div>
+        {isEdit&&(
+          <button className="act-btn danger" style={{width:"100%",marginTop:8,padding:"10px 0"}}
+            onClick={()=>{onCancel();onClose();}}>取消此預約</button>
+        )}
       </div>
     </div>
   );
@@ -1762,7 +1765,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.33</span>
+          <span className="s-val">v15.34</span>
         </div>
       </div>
     </div>
