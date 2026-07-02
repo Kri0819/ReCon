@@ -296,27 +296,37 @@ function ymd(y,m,d){ return `${y}-${String(m+1).padStart(2,"0")}-${String(d).pad
 // Calculate next due date for a tracking plan after a completion date
 function calcPlanNextDue(plan, fromDate) {
   const base = new Date(fromDate || TODAY);
-  const {freq, anchorDay, anchorDow} = plan;
+  const {freq, anchorDay} = plan;
+
+  // 核心邏輯：下次到期日 = 下一個「週期範圍」的起始日
+  // 而不是「完成日 + 固定天數」。這樣不管本週哪天完成，
+  // 下次提醒都對齊到下週日（或下個月1日等），週期範圍本身不會漂移。
 
   if(freq==="weekly"){
-    if(anchorDow!=null){
-      // Next occurrence of that day of week
-      const d = new Date(base); d.setDate(d.getDate()+1); // at least tomorrow
-      while(d.getDay()!==anchorDow) d.setDate(d.getDate()+1);
-      return dateStr(d);
-    }
-    return addDays(fromDate||TODAY, 7);
+    // 當週週日 + 7 天 = 下週週日
+    const weekStart = new Date(base); weekStart.setDate(base.getDate()-base.getDay());
+    const nextWeekStart = new Date(weekStart); nextWeekStart.setDate(weekStart.getDate()+7);
+    return dateStr(nextWeekStart);
   }
-  if(freq==="biweekly") return addDays(fromDate||TODAY, 14);
-  if(freq==="quarterly") return addDays(fromDate||TODAY, 90);
-  // monthly
+  if(freq==="biweekly"){
+    const weekStart = new Date(base); weekStart.setDate(base.getDate()-base.getDay());
+    const nextBiStart = new Date(weekStart); nextBiStart.setDate(weekStart.getDate()+14);
+    return dateStr(nextBiStart);
+  }
+  if(freq==="quarterly"){
+    const m=base.getMonth(); const q=Math.floor(m/3)*3;
+    let nextQ=q+3, y=base.getFullYear();
+    if(nextQ>11){nextQ=0;y+=1;}
+    return `${y}-${String(nextQ+1).padStart(2,"0")}-01`;
+  }
+  // monthly：對齊到下個月1日，若有固定日期(anchorDay)則用該日
+  let y=base.getFullYear(), m=base.getMonth()+1;
+  m+=1; if(m>12){m=1;y+=1;}
   if(anchorDay){
-    let y=base.getFullYear(), m=base.getMonth()+1;
-    m+=1; if(m>12){m=1;y+=1;}
     const last=new Date(y,m,0).getDate();
     return `${y}-${String(m).padStart(2,"0")}-${String(Math.min(anchorDay,last)).padStart(2,"0")}`;
   }
-  return addDays(fromDate||TODAY, 30);
+  return `${y}-${String(m).padStart(2,"0")}-01`;
 }
 
 // Get period start for a plan (for counting completions)
@@ -1717,7 +1727,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.30</span>
+          <span className="s-val">v15.31</span>
         </div>
       </div>
     </div>
