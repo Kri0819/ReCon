@@ -17,13 +17,13 @@ const css = `
   --serif:'Noto Serif TC',serif;--sans:'Inter',system-ui,sans-serif;--r:12px;
 }
 [data-theme="dark"]{
-  --bg:#111827;--surface:#1E2A3A;--surface2:#162030;
-  --border:#243044;--border2:#2E3D54;
-  --text:#EEF2F7;--text2:#C8D4E4;--muted:#7A90AA;--faint:#3A4F68;
-  --red:#E05555;--red-bg:#2A1A1A;
-  --yellow:#D4A020;--yellow-bg:#241C08;
-  --green:#4A9B6F;--green-bg:#0E2018;
-  --accent:#6B9FD4;--accent-lt:#1A2D44;--accent-mid:#5A8AB8;
+  --bg:#0F1520;--surface:#1A2432;--surface2:#141C28;
+  --border:#2C3A4C;--border2:#3A4A5E;
+  --text:#FFFFFF;--text2:#D8E0EA;--muted:#9AACBE;--faint:#4A5A6E;
+  --red:#FF6B6B;--red-bg:#2E1818;
+  --yellow:#F0B840;--yellow-bg:#2A2008;
+  --green:#5FC088;--green-bg:#0F241A;
+  --accent:#7FB0E8;--accent-lt:#1E3248;--accent-mid:#6FA0D8;
 }
 html,body{height:100%;background:var(--bg);font-family:var(--sans);font-size:14px;line-height:1.55;color:var(--text);-webkit-font-smoothing:antialiased}
 .shell{width:100%;height:100dvh;max-width:430px;margin:0 auto;background:var(--bg);display:flex;flex-direction:column;position:relative;overflow:hidden}
@@ -1765,7 +1765,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.34</span>
+          <span className="s-val">v15.35</span>
         </div>
       </div>
     </div>
