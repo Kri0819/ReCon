@@ -245,6 +245,26 @@ const LOGO_DARK  = "/logo-dark.png";
 
 const LS = { cases:"rc_cases5", methods:"rc_methods3", levels:"rc_levels3", theme:"rc_theme1" };
 const LS_DPLANS = "rc_default_plans3";
+const LS_WEEKSTART = "rc_week_start_dow1";
+
+// 取得使用者設定的週起始星期 (0=週日 ... 6=週六)，預設週日
+function getWeekStartDow(){
+  try{
+    const v = localStorage.getItem(LS_WEEKSTART);
+    const n = v!==null ? parseInt(v,10) : 0;
+    return (n>=0 && n<=6) ? n : 0;
+  }catch{ return 0; }
+}
+// 通用公式：無論 weekStartDow 是哪一天，都能正確算出「date 所在週期」的起始日
+// 例如 weekStartDow=3(週三)：週三~下週二為一個週期
+function getWeekStart(date){
+  const dow = date.getDay();
+  const startDow = getWeekStartDow();
+  const diff = (dow - startDow + 7) % 7; // date 距離本週期起始日有幾天
+  const d = new Date(date);
+  d.setDate(date.getDate() - diff);
+  return d;
+}
 
 const LEVEL_COLOR_OPTIONS = [
   {key:"red",    label:"紅", bg:"#FDECEA", color:"#C0392B"},
@@ -303,13 +323,13 @@ function calcPlanNextDue(plan, fromDate) {
   // 下次提醒都對齊到下週日（或下個月1日等），週期範圍本身不會漂移。
 
   if(freq==="weekly"){
-    // 當週週日 + 7 天 = 下週週日
-    const weekStart = new Date(base); weekStart.setDate(base.getDate()-base.getDay());
+    // 本週期起始日 + 7 天 = 下週期起始日
+    const weekStart = getWeekStart(base);
     const nextWeekStart = new Date(weekStart); nextWeekStart.setDate(weekStart.getDate()+7);
     return dateStr(nextWeekStart);
   }
   if(freq==="biweekly"){
-    const weekStart = new Date(base); weekStart.setDate(base.getDate()-base.getDay());
+    const weekStart = getWeekStart(base);
     const nextBiStart = new Date(weekStart); nextBiStart.setDate(weekStart.getDate()+14);
     return dateStr(nextBiStart);
   }
@@ -332,11 +352,11 @@ function calcPlanNextDue(plan, fromDate) {
 // Get period start for a plan (for counting completions)
 function getPeriodStart(freq){
   const now=new Date(TODAY);
-  // 本週起點：當週週日
-  const weekStart=new Date(now); weekStart.setDate(now.getDate()-now.getDay());
+  // 本週期起點：依使用者設定的起始星期計算
+  const weekStart = getWeekStart(now);
   if(freq==="weekly") return dateStr(weekStart);
   if(freq==="biweekly"){
-    // 當週週日算第1天，往後算14天（即直接以本週週日為雙週起點）
+    // 本週期起始日算第1天，往後算14天
     return dateStr(weekStart);
   }
   if(freq==="quarterly"){
@@ -1683,7 +1703,7 @@ function ExportCenterPage({ cases, levels, methods, onBack, showToast }){
   );
 }
 
-function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateCase, showToast, theme, setTheme }){
+function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateCase, showToast, theme, setTheme, weekStartDow, setWeekStartDow }){
   const [page,setPage]=useState("hub");
   if(page==="methods")  return <MethodsPage  methods={methods} setMethods={setMethods} onBack={()=>setPage("hub")}/>;
   if(page==="levels")   return <LevelsPage   levels={levels}   setLevels={setLevels}   methods={methods} onBack={()=>setPage("hub")}/>;
@@ -1719,6 +1739,21 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <button className={`act-btn ${theme==="dark"?"primary":""}`} style={{padding:"5px 14px",fontSize:12}} onClick={()=>setTheme("dark")}>深色</button>
           </div>
         </div>
+        <div className="settings-row static" style={{flexDirection:"column",alignItems:"stretch",gap:10}}>
+          <div>
+            <div className="s-label">週期起始日</div>
+            <div className="s-sub">追蹤計畫「每週／每兩週」的週期範圍從哪天開始算</div>
+          </div>
+          <div className="opt-row" style={{marginBottom:0,flexWrap:"wrap"}}>
+            {DOW_NAMES.map((name,i)=>(
+              <div key={i} className={`opt ${weekStartDow===i?"active":""}`}
+                style={{minWidth:44,flex:"0 0 auto"}}
+                onClick={()=>setWeekStartDow(i)}>
+                {name}
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
       <div className="sec-label">關於</div>
       <div className="settings-group">
@@ -1727,7 +1762,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.31</span>
+          <span className="s-val">v15.32</span>
         </div>
       </div>
     </div>
@@ -1744,6 +1779,21 @@ export default function App(){
   const [levels,  setLevels]  = useState(()=>lsGet(LS.levels,  INITIAL_LEVELS));
   const [theme,   setThemeRaw]= useState(()=>{ try{return localStorage.getItem(LS.theme)||"light"}catch{return "light"} });
   function setTheme(t){ setThemeRaw(t); try{localStorage.setItem(LS.theme,t)}catch{} }
+  const [weekStartDow, setWeekStartDowRaw] = useState(()=>getWeekStartDow());
+  function setWeekStartDow(d){
+    setWeekStartDowRaw(d);
+    try{ localStorage.setItem(LS_WEEKSTART, String(d)); }catch{}
+    // 立即重算所有個案的 trackingPlans.nextDue，讓新的週期起始日馬上生效，不會讓程式因舊資料而算錯
+    setCases(prev=>prev.map(c=>({
+      ...c,
+      trackingPlans:(c.trackingPlans||[]).map(p=>{
+        // 若尚未有預約(bookings)，重新對齊 nextDue 到新的週期範圍；已手動預約的日期不受影響
+        if(Array.isArray(p.bookings) && p.bookings.length>0) return p;
+        if(!p.nextDue) return p;
+        return {...p, nextDue: calcPlanNextDue(p, TODAY)};
+      })
+    })));
+  }
   const [tab,     setTab]     = useState("home");
   const [detailId,setDetailId]= useState(null);
   const [toast,   setToast]   = useState(null);
@@ -1792,7 +1842,7 @@ export default function App(){
           {tab==="cases"    &&<CasesScreen    cases={cases} methods={methods} levels={levels} onAdd={()=>setAddOpen(true)} onOpen={openCase} updateCase={updateCase} deleteCase={deleteCase} showToast={showToast}/>}
           {tab==="detail"   &&detailCase&&<DetailScreen case_={detailCase} methods={methods} levels={levels} onBack={closeDetail} updateCase={updateCase} showToast={showToast}/>}
           {tab==="calendar" &&<CalendarScreen cases={cases} onOpen={openCase}/>}
-          {tab==="settings" &&<SettingsScreen cases={cases} methods={methods} setMethods={setMethods} levels={levels} setLevels={setLevels} updateCase={updateCase} showToast={showToast}/>}
+          {tab==="settings" &&<SettingsScreen cases={cases} methods={methods} setMethods={setMethods} levels={levels} setLevels={setLevels} updateCase={updateCase} showToast={showToast} theme={theme} setTheme={setTheme} weekStartDow={weekStartDow} setWeekStartDow={setWeekStartDow}/>}
         </div>
         {addOpen&&<AddCaseModal existingCases={cases} levels={levels} methods={methods} onClose={()=>setAddOpen(false)} onSave={nc=>{addCase(nc);setAddOpen(false);}}/>}
         {toast&&<Toast msg={toast}/>}
