@@ -477,11 +477,11 @@ function PlanChips({c}){
 function TrackingPlanEditor({ plans, setPlans, methods }){
   const safe = methods.length>0?methods:["電話"];
   const [adding, setAdding] = useState(false);
-  const [form, setForm]     = useState({name:"",method:safe[0],freq:"monthly",anchorDay:null,anchorDow:null,timesPerPeriod:1});
+  const [form, setForm]     = useState({method:safe[0],freq:"monthly",anchorDay:null,anchorDow:null,timesPerPeriod:1});
 
   function add(){
-    if(!form.name.trim()&&!form.method) return;
-    const name = form.name.trim()||form.method;
+    if(!form.method) return;
+    const name = form.method; // 任務名稱直接用聯絡方式，不重複輸入
     const nextDue = calcPlanNextDue({...form}, TODAY);
     setPlans(prev=>[...prev,{...form, id:genPlanId(), name, nextDue}]);
     setAdding(false);
@@ -515,10 +515,8 @@ function TrackingPlanEditor({ plans, setPlans, methods }){
 
       {adding&&(
         <div style={{background:"var(--bg)",border:"1px solid var(--border)",borderRadius:10,padding:"12px 14px",marginTop:4}}>
-          <label className="inp-label">任務名稱</label>
-          <input className="inp" placeholder="例：電話追蹤" value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} autoFocus/>
           <label className="inp-label">聯絡方式</label>
-          <select className="inp" value={form.method} onChange={e=>setForm(f=>({...f,method:e.target.value}))}>
+          <select className="inp" value={form.method} onChange={e=>setForm(f=>({...f,method:e.target.value}))} autoFocus>
             {safe.map(m=><option key={m} value={m}>{m}</option>)}
           </select>
           <label className="inp-label">頻率</label>
@@ -530,20 +528,6 @@ function TrackingPlanEditor({ plans, setPlans, methods }){
               </div>
             ))}
           </div>
-          {form.freq==="monthly"&&(
-            <>
-              <label className="inp-label">固定日期（選填）</label>
-              <div className="opt-row" style={{flexWrap:"wrap"}}>
-                {[null,1,5,10,15,20,25].map(d=>(
-                  <div key={d??0} className={`opt ${form.anchorDay===d?"active":""}`}
-                    style={{minWidth:44,flex:"0 0 auto"}}
-                    onClick={()=>setForm(f=>({...f,anchorDay:d}))}>
-                    {d===null?"不固定":`${d}日`}
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
           {form.freq==="weekly"&&(
             <>
               <label className="inp-label">固定星期幾（選填）</label>
@@ -1500,16 +1484,32 @@ function MethodsPage({ methods, setMethods, onBack }){
 
 function LevelsPage({ levels, setLevels, methods, onBack }){
   const safe=methods.length>0?methods:["電話"];
-  const [editKey,setEditKey]=useState(null); const [form,setForm]=useState({}); const [planEdit,setPlanEdit]=useState([]);
+  const [editKey,setEditKey]=useState(null); const [form,setForm]=useState({}); const [planEdit,setPlanEdit]=useState([]); const [editErr,setEditErr]=useState("");
   const [adding,setAdding]=useState(false); const [newForm,setNewForm]=useState({key:"",label:"",days:14,desc:"",colorKey:"yellow"}); const [newPlans,setNewPlans]=useState([]); const [err,setErr]=useState("");
   const colorOf=k=>LEVEL_COLOR_OPTIONS.find(c=>c.key===k)||LEVEL_COLOR_OPTIONS[1];
   function loadPlans(k){ try{const r=localStorage.getItem(LS_DPLANS);if(r){const d=JSON.parse(r);return d[k]||[];}}catch{}return[]; }
   function savePlans(k,t){ try{const r=localStorage.getItem(LS_DPLANS);const d=r?JSON.parse(r):{};d[k]=t;localStorage.setItem(LS_DPLANS,JSON.stringify(d));}catch{} }
-  function startEdit(k){setEditKey(k);setAdding(false);setForm({label:levels[k].label,days:levels[k].days,desc:levels[k].desc||"",colorKey:levels[k].colorKey||"yellow"});setPlanEdit(loadPlans(k));}
-  function saveEdit(){if(!form.label?.trim())return;setLevels(prev=>({...prev,[editKey]:{...prev[editKey],label:form.label.trim(),days:Math.max(1,Number(form.days)||7),desc:(form.desc||"").trim(),colorKey:form.colorKey}}));savePlans(editKey,planEdit);setEditKey(null);}
+  function startEdit(k){setEditKey(k);setAdding(false);setEditErr("");setForm({label:levels[k].label,days:levels[k].days,desc:levels[k].desc||"",colorKey:levels[k].colorKey||"yellow"});setPlanEdit(loadPlans(k));}
+  function saveEdit(){
+    if(!form.label?.trim())return;
+    if(planEdit.length===0){ setEditErr("每個等級至少需要一個追蹤任務"); return; }
+    setEditErr("");
+    setLevels(prev=>({...prev,[editKey]:{...prev[editKey],label:form.label.trim(),days:Math.max(1,Number(form.days)||7),desc:(form.desc||"").trim(),colorKey:form.colorKey}}));
+    savePlans(editKey,planEdit);
+    setEditKey(null);
+  }
   function delLevel(k){if(Object.keys(levels).length<=1)return;setLevels(prev=>{const n={...prev};delete n[k];return n;});setEditKey(null);}
   function startAdd(){setAdding(true);setEditKey(null);setNewForm({key:"",label:"",days:14,desc:"",colorKey:"yellow"});setNewPlans([]);setErr("");}
-  function saveAdd(){const k=newForm.key.trim().toUpperCase();if(!k||!newForm.label.trim()){setErr("請填寫 ID 和名稱");return;}if(levels[k]){setErr(`ID「${k}」已存在`);return;}setLevels(prev=>({...prev,[k]:{label:newForm.label.trim(),days:Math.max(1,Number(newForm.days)||14),desc:(newForm.desc||"").trim(),colorKey:newForm.colorKey}}));savePlans(k,newPlans);setAdding(false);setErr("");}
+  function saveAdd(){
+    const k=newForm.key.trim().toUpperCase();
+    if(!k||!newForm.label.trim()){setErr("請填寫 ID 和名稱");return;}
+    if(levels[k]){setErr(`ID「${k}」已存在`);return;}
+    if(newPlans.length===0){setErr("每個等級至少需要一個追蹤任務");return;}
+    setLevels(prev=>({...prev,[k]:{label:newForm.label.trim(),days:Math.max(1,Number(newForm.days)||14),desc:(newForm.desc||"").trim(),colorKey:newForm.colorKey}}));
+    savePlans(k,newPlans);
+    setAdding(false);
+    setErr("");
+  }
   return (
     <div className="screen-pad">
       <div className="ph"><div><button className="back-btn" onClick={onBack}>‹ 設定</button><div className="ph-title">關懷等級管理</div></div><button className="ph-action" onClick={startAdd}>＋</button></div>
@@ -1519,8 +1519,16 @@ function LevelsPage({ levels, setLevels, methods, onBack }){
           if(editKey===k) return (
             <div key={k} style={{background:"var(--bg)",padding:"14px 16px",borderBottom:"1px solid var(--border)"}}>
               <label className="inp-label">名稱</label><input className="inp" value={form.label} onChange={e=>setForm(x=>({...x,label:e.target.value}))} autoFocus/>
-              <label className="inp-label">頻率說明</label><input className="inp" value={form.desc} placeholder="例：每週一次" onChange={e=>setForm(x=>({...x,desc:e.target.value}))}/>
-              <label className="inp-label">間隔天數</label><input className="inp" type="number" min={1} value={form.days} onChange={e=>setForm(x=>({...x,days:e.target.value}))}/>
+              <div style={{display:"flex",gap:8}}>
+                <div style={{flex:1}}>
+                  <label className="inp-label">頻率說明</label>
+                  <input className="inp" value={form.desc} placeholder="例：每週一次" onChange={e=>setForm(x=>({...x,desc:e.target.value}))}/>
+                </div>
+                <div style={{flex:1}}>
+                  <label className="inp-label">間隔天數</label>
+                  <input className="inp" type="number" min={1} value={form.days} onChange={e=>setForm(x=>({...x,days:e.target.value}))}/>
+                </div>
+              </div>
               <label className="inp-label">顏色</label>
               <div className="opt-row" style={{marginBottom:12}}>
                 {LEVEL_COLOR_OPTIONS.map(c=><div key={c.key} className={`opt ${form.colorKey===c.key?"active":""}`} style={form.colorKey===c.key?{background:c.bg,borderColor:c.color,color:c.color}:{}} onClick={()=>setForm(x=>({...x,colorKey:c.key}))}>{c.label}</div>)}
@@ -1528,6 +1536,7 @@ function LevelsPage({ levels, setLevels, methods, onBack }){
               <div style={{borderTop:"1px solid var(--border)",marginBottom:12,paddingTop:12}}>
                 <TrackingPlanEditor plans={planEdit} setPlans={setPlanEdit} methods={safe}/>
               </div>
+              {editErr&&<div className="inp-err">{editErr}</div>}
               <div style={{display:"flex",gap:6}}>
                 <button className="act-btn primary" style={{flex:2,padding:"8px 0",fontSize:13}} onClick={saveEdit}>儲存</button>
                 {Object.keys(levels).length>1&&<button className="act-btn danger" style={{flex:1,padding:"8px 0",fontSize:13}} onClick={()=>delLevel(k)}>刪除</button>}
@@ -1551,8 +1560,16 @@ function LevelsPage({ levels, setLevels, methods, onBack }){
         {adding&&(
           <div style={{background:"var(--bg)",padding:"14px 16px",borderBottom:"1px solid var(--border)"}}>
             <label className="inp-label">名稱</label><input className="inp" placeholder="例：高風險" value={newForm.label} onChange={e=>setNewForm(f=>({...f,label:e.target.value}))} autoFocus/>
-            <label className="inp-label">頻率說明</label><input className="inp" placeholder="例：每月兩次" value={newForm.desc} onChange={e=>setNewForm(f=>({...f,desc:e.target.value}))}/>
-            <label className="inp-label">間隔天數</label><input className="inp" type="number" min={1} value={newForm.days} onChange={e=>setNewForm(f=>({...f,days:e.target.value}))}/>
+            <div style={{display:"flex",gap:8}}>
+              <div style={{flex:1}}>
+                <label className="inp-label">頻率說明</label>
+                <input className="inp" placeholder="例：每月兩次" value={newForm.desc} onChange={e=>setNewForm(f=>({...f,desc:e.target.value}))}/>
+              </div>
+              <div style={{flex:1}}>
+                <label className="inp-label">間隔天數</label>
+                <input className="inp" type="number" min={1} value={newForm.days} onChange={e=>setNewForm(f=>({...f,days:e.target.value}))}/>
+              </div>
+            </div>
             <label className="inp-label">顏色</label>
             <div className="opt-row" style={{marginBottom:8}}>
               {LEVEL_COLOR_OPTIONS.map(c=><div key={c.key} className={`opt ${newForm.colorKey===c.key?"active":""}`} style={newForm.colorKey===c.key?{background:c.bg,borderColor:c.color,color:c.color}:{}} onClick={()=>setNewForm(f=>({...f,colorKey:c.key}))}>{c.label}</div>)}
@@ -1714,7 +1731,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.28</span>
+          <span className="s-val">v15.29</span>
         </div>
       </div>
     </div>
