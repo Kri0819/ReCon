@@ -161,6 +161,7 @@ select.inp{cursor:pointer;appearance:auto;height:44px}
 .swipe-row{position:relative;overflow:hidden;margin:0 22px 12px;border-radius:var(--r)}
 .swipe-card{display:flex;align-items:center;gap:14px;padding:18px 18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);cursor:pointer;position:relative;z-index:1;transform:translateX(0);transition:transform .25s ease;user-select:none;-webkit-user-select:none}
 .swipe-card.swiped{transform:translateX(-152px)}
+.swipe-card.swiped.single{transform:translateX(-76px)}
 .swipe-actions{position:absolute;right:0;top:0;bottom:0;width:152px;display:flex;align-items:center;justify-content:center;gap:10px;padding-right:6px}
 .swipe-btn{
   width:56px;height:56px;border-radius:50%;flex-shrink:0;
@@ -1512,6 +1513,7 @@ function MethodsPage({ methods, setMethods, onBack }){
 function LevelsPage({ levels, setLevels, methods, onBack }){
   const safe=methods.length>0?methods:["電話"];
   const [editKey,setEditKey]=useState(null); const [form,setForm]=useState({}); const [planEdit,setPlanEdit]=useState([]); const [editErr,setEditErr]=useState("");
+  const [swipedKey,setSwipedKey]=useState(null); const touchStartX=useRef(0);
   const [adding,setAdding]=useState(false); const [newForm,setNewForm]=useState({key:"",label:"",days:14,desc:"",colorKey:"yellow"}); const [newPlans,setNewPlans]=useState([]); const [err,setErr]=useState("");
   const colorOf=k=>LEVEL_COLOR_OPTIONS.find(c=>c.key===k)||LEVEL_COLOR_OPTIONS[1];
   function loadPlans(k){ try{const r=localStorage.getItem(LS_DPLANS);if(r){const d=JSON.parse(r);return d[k]||[];}}catch{}return[]; }
@@ -1571,16 +1573,37 @@ function LevelsPage({ levels, setLevels, methods, onBack }){
               </div>
             </div>
           );
+          const isSwiped = swipedKey===k;
+          const canDelete = Object.keys(levels).length>1;
           return (
-            <div key={k} className="settings-row" onClick={()=>startEdit(k)}>
-              <div style={{display:"flex",alignItems:"center",gap:10}}>
-                <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4,background:col.bg,color:col.color,letterSpacing:".02em"}}>{l.label}</span>
-                <div>
-                  <div className="s-label">{l.desc||l.label}</div>
-                  <div className="s-sub">每 {l.days} 天{plans.length>0?" · "+plans.map(p=>`${p.name||p.method}`).join("、"):""}</div>
+            <div key={k} className="swipe-row" style={{margin:0,borderRadius:0}}>
+              {canDelete&&(
+                <div className="swipe-actions" style={{width:76,justifyContent:"center"}}>
+                  <button className="swipe-btn sb-delete"
+                    onClick={()=>{delLevel(k);setSwipedKey(null);}}>
+                    <span className="swipe-btn-icon">✕</span>刪除
+                  </button>
                 </div>
+              )}
+              <div className={`settings-row swipe-card${isSwiped?" swiped single":""}`}
+                style={{margin:0,borderRadius:0,border:"none",borderBottom:"1px solid var(--border)"}}
+                onClick={()=>{ if(isSwiped){setSwipedKey(null);return;} startEdit(k); }}
+                onTouchStart={e=>{touchStartX.current=e.touches[0].clientX;}}
+                onTouchEnd={e=>{
+                  if(!canDelete) return;
+                  const dx=touchStartX.current-e.changedTouches[0].clientX;
+                  if(dx>40) setSwipedKey(k);
+                  else if(dx<-20) setSwipedKey(null);
+                }}>
+                <div style={{display:"flex",alignItems:"center",gap:10}}>
+                  <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4,background:col.bg,color:col.color,letterSpacing:".02em"}}>{l.label}</span>
+                  <div>
+                    <div className="s-label">{l.desc||l.label}</div>
+                    <div className="s-sub">每 {l.days} 天{plans.length>0?" · "+plans.map(p=>`${p.name||p.method}`).join("、"):""}</div>
+                  </div>
+                </div>
+                <span style={{fontSize:12,color:"var(--accent-mid)"}}>編輯</span>
               </div>
-              <span style={{fontSize:12,color:"var(--accent-mid)"}}>編輯</span>
             </div>
           );
         })}
@@ -1773,7 +1796,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.38</span>
+          <span className="s-val">v15.39</span>
         </div>
       </div>
     </div>
