@@ -160,12 +160,17 @@ select.inp{cursor:pointer;appearance:auto;height:44px}
 /* Swipe */
 .swipe-row{position:relative;overflow:hidden;margin:0 22px 12px;border-radius:var(--r)}
 .swipe-card{display:flex;align-items:center;gap:14px;padding:18px 18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);cursor:pointer;position:relative;z-index:1;transform:translateX(0);transition:transform .25s ease;user-select:none;-webkit-user-select:none}
-.swipe-card.swiped{transform:translateX(-148px)}
-.swipe-actions{position:absolute;right:0;top:0;bottom:0;width:148px;display:flex;border-radius:0 var(--r) var(--r) 0;overflow:hidden}
-.swipe-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:none;cursor:pointer;font-family:var(--sans);font-size:11px;font-weight:600}
-.swipe-btn:active{opacity:.8}
-.swipe-btn.sb-archive{background:var(--yellow-bg);color:var(--yellow);border-left:1px solid #EDD9A0}
-.swipe-btn.sb-delete{background:var(--red-bg);color:var(--red);border-left:1px solid #F5CECA}
+.swipe-card.swiped{transform:translateX(-152px)}
+.swipe-actions{position:absolute;right:0;top:0;bottom:0;width:152px;display:flex;align-items:center;justify-content:center;gap:10px;padding-right:6px}
+.swipe-btn{
+  width:56px;height:56px;border-radius:50%;flex-shrink:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  border:none;cursor:pointer;font-family:var(--sans);font-size:10px;font-weight:600;
+  box-shadow:0 2px 6px rgba(0,0,0,.08);
+}
+.swipe-btn:active{opacity:.8;transform:scale(.95)}
+.swipe-btn.sb-archive{background:var(--yellow-bg);color:var(--yellow);border:1.5px solid #EDD9A0}
+.swipe-btn.sb-delete{background:var(--red-bg);color:var(--red);border:1.5px solid #F5CECA}
 .swipe-btn-icon{font-size:17px;line-height:1}
 .del-confirm{padding:10px 14px;background:var(--red-bg);border:1px solid #F5CECA;border-top:none;border-radius:0 0 var(--r) var(--r)}
 /* Log pick modal */
@@ -1768,7 +1773,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.37</span>
+          <span className="s-val">v15.38</span>
         </div>
       </div>
     </div>
