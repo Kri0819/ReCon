@@ -865,7 +865,10 @@ function HomeScreen({ cases, methods, levels, updateCase, showToast }){
                         const due = (ts?.results||[]).filter(r=>r.done<r.goal && r.nextDue && r.nextDue<=TODAY);
                         const pool = due.length>0 ? due : (ts?.results||[]).filter(r=>r.done<r.goal);
                         const list = pool.length>0 ? pool : (c.trackingPlans||[]);
-                        return list.map(p=>p.method).filter((v,i,a)=>a.indexOf(v)===i).join("、")||"—";
+                        const methodStr = list.map(p=>p.method).filter((v,i,a)=>a.indexOf(v)===i).join("、")||"—";
+                        // 若這些任務中，最近的到期日有指定時間，附加顯示（例如 電話 16:37）
+                        const withTime = list.find(p=>p.visitTime);
+                        return withTime ? `${methodStr} ${withTime.visitTime}` : methodStr;
                       })()}
                     </span>
                   </div>
@@ -1765,7 +1768,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.36</span>
+          <span className="s-val">v15.37</span>
         </div>
       </div>
     </div>
