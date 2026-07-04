@@ -1479,33 +1479,56 @@ function CalendarScreen({ cases, onOpen }){
 
 function MethodsPage({ methods, setMethods, onBack }){
   const [editing,setEditing]=useState(null); const [editVal,setEditVal]=useState(""); const [adding,setAdding]=useState(false); const [newVal,setNewVal]=useState("");
+  const [swipedIdx,setSwipedIdx]=useState(null); const touchStartX=useRef(0);
   function startEdit(i){setEditing(i);setEditVal(methods[i]);setAdding(false);}
   function saveEdit(){const v=editVal.trim();if(!v){setEditing(null);return;}setMethods(prev=>prev.map((m,i)=>i===editing?v:m));setEditing(null);}
-  function del(i){if(methods.length<=1)return;setMethods(prev=>prev.filter((_,j)=>j!==i));setEditing(null);}
+  function del(i){if(methods.length<=1)return;setMethods(prev=>prev.filter((_,j)=>j!==i));setEditing(null);setSwipedIdx(null);}
   function addM(){const v=newVal.trim();if(!v||methods.includes(v))return;setMethods(prev=>[...prev,v]);setNewVal("");setAdding(false);}
   return (
     <div className="screen-pad">
       <div className="ph"><div><button className="back-btn" onClick={onBack}>‹ 設定</button><div className="ph-title">聯絡方式</div></div><button className="ph-action" onClick={()=>{setAdding(true);setEditing(null);}}>＋</button></div>
-      <div className="settings-group">
-        {methods.map((m,i)=>editing===i?(
-          <div key={i} className="settings-row" style={{gap:8,cursor:"default"}}>
+
+      {methods.map((m,i)=>{
+        if(editing===i) return (
+          <div key={i} className="card-row" style={{gap:8,cursor:"default"}}>
             <input className="inp" style={{flex:1,marginBottom:0,height:36,padding:"0 12px",fontSize:13}} value={editVal} onChange={e=>setEditVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")saveEdit();if(e.key==="Escape")setEditing(null);}} autoFocus/>
             <button className="act-btn primary" style={{padding:"6px 12px",fontSize:12}} onClick={saveEdit}>存</button>
             <button className="act-btn danger" style={{padding:"6px 10px",fontSize:12}} onClick={()=>del(i)} disabled={methods.length<=1}>刪</button>
           </div>
-        ):(
-          <div key={i} className="settings-row" onClick={()=>startEdit(i)}>
-            <span className="s-label">{m}</span><span style={{fontSize:12,color:"var(--accent-mid)"}}>編輯</span>
+        );
+        const isSwiped=swipedIdx===i; const canDelete=methods.length>1;
+        return (
+          <div className="swipe-row" key={i}>
+            {canDelete&&(
+              <div className="swipe-actions" style={{width:76,justifyContent:"center"}}>
+                <button className="swipe-btn sb-delete" onClick={()=>del(i)}>
+                  <span className="swipe-btn-icon">✕</span>刪除
+                </button>
+              </div>
+            )}
+            <div className={`swipe-card${isSwiped?" swiped single":""}`}
+              onClick={()=>{ if(isSwiped){setSwipedIdx(null);return;} startEdit(i); }}
+              onTouchStart={e=>{touchStartX.current=e.touches[0].clientX;}}
+              onTouchEnd={e=>{
+                if(!canDelete) return;
+                const dx=touchStartX.current-e.changedTouches[0].clientX;
+                if(dx>40) setSwipedIdx(i);
+                else if(dx<-20) setSwipedIdx(null);
+              }}>
+              <span className="row-nick" style={{flex:1}}>{m}</span>
+              <span style={{fontSize:12,color:"var(--accent-mid)",flexShrink:0}}>編輯</span>
+            </div>
           </div>
-        ))}
-        {adding&&(
-          <div className="settings-row" style={{gap:8,cursor:"default"}}>
-            <input className="inp" style={{flex:1,marginBottom:0,height:36,padding:"0 12px",fontSize:13}} placeholder="新聯絡方式…" value={newVal} onChange={e=>setNewVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")addM();if(e.key==="Escape")setAdding(false);}} autoFocus/>
-            <button className="act-btn primary" style={{padding:"6px 12px",fontSize:12}} onClick={addM}>加入</button>
-            <button className="act-btn" style={{padding:"6px 10px",fontSize:12}} onClick={()=>setAdding(false)}>✕</button>
-          </div>
-        )}
-      </div>
+        );
+      })}
+
+      {adding&&(
+        <div className="card-row" style={{gap:8,cursor:"default"}}>
+          <input className="inp" style={{flex:1,marginBottom:0,height:36,padding:"0 12px",fontSize:13}} placeholder="新聯絡方式…" value={newVal} onChange={e=>setNewVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")addM();if(e.key==="Escape")setAdding(false);}} autoFocus/>
+          <button className="act-btn primary" style={{padding:"6px 12px",fontSize:12}} onClick={addM}>加入</button>
+          <button className="act-btn" style={{padding:"6px 10px",fontSize:12}} onClick={()=>setAdding(false)}>✕</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1542,100 +1565,102 @@ function LevelsPage({ levels, setLevels, methods, onBack }){
   return (
     <div className="screen-pad">
       <div className="ph"><div><button className="back-btn" onClick={onBack}>‹ 設定</button><div className="ph-title">關懷等級管理</div></div><button className="ph-action" onClick={startAdd}>＋</button></div>
-      <div className="settings-group">
-        {Object.entries(levels).map(([k,l])=>{
-          const col=colorOf(l.colorKey||"yellow"); const plans=loadPlans(k);
-          if(editKey===k) return (
-            <div key={k} style={{background:"var(--bg)",padding:"14px 16px",borderBottom:"1px solid var(--border)"}}>
-              <label className="inp-label">名稱</label><input className="inp" value={form.label} onChange={e=>setForm(x=>({...x,label:e.target.value}))} autoFocus/>
-              <div style={{display:"flex",gap:8}}>
-                <div style={{flex:1}}>
-                  <label className="inp-label">頻率說明</label>
-                  <input className="inp" value={form.desc} placeholder="例：每週一次" onChange={e=>setForm(x=>({...x,desc:e.target.value}))}/>
-                </div>
-                <div style={{flex:1}}>
-                  <label className="inp-label">間隔天數</label>
-                  <input className="inp" type="number" min={1} value={form.days} onChange={e=>setForm(x=>({...x,days:e.target.value}))}/>
-                </div>
-              </div>
-              <label className="inp-label">顏色</label>
-              <div className="opt-row" style={{marginBottom:12}}>
-                {LEVEL_COLOR_OPTIONS.map(c=><div key={c.key} className={`opt ${form.colorKey===c.key?"active":""}`} style={form.colorKey===c.key?{background:c.bg,borderColor:c.color,color:c.color}:{}} onClick={()=>setForm(x=>({...x,colorKey:c.key}))}>{c.label}</div>)}
-              </div>
-              <div style={{borderTop:"1px solid var(--border)",marginBottom:12,paddingTop:12}}>
-                <TrackingPlanEditor plans={planEdit} setPlans={setPlanEdit} methods={safe}/>
-              </div>
-              {editErr&&<div className="inp-err">{editErr}</div>}
-              <div style={{display:"flex",gap:6}}>
-                <button className="act-btn primary" style={{flex:2,padding:"8px 0",fontSize:13}} onClick={saveEdit}>儲存</button>
-                {Object.keys(levels).length>1&&<button className="act-btn danger" style={{flex:1,padding:"8px 0",fontSize:13}} onClick={()=>delLevel(k)}>刪除</button>}
-                <button className="act-btn" style={{flex:1,padding:"8px 0",fontSize:13}} onClick={()=>setEditKey(null)}>取消</button>
-              </div>
-            </div>
-          );
-          const isSwiped = swipedKey===k;
-          const canDelete = Object.keys(levels).length>1;
-          return (
-            <div key={k} className="swipe-row" style={{margin:0,borderRadius:0}}>
-              {canDelete&&(
-                <div className="swipe-actions" style={{width:76,justifyContent:"center"}}>
-                  <button className="swipe-btn sb-delete"
-                    onClick={()=>{delLevel(k);setSwipedKey(null);}}>
-                    <span className="swipe-btn-icon">✕</span>刪除
-                  </button>
-                </div>
-              )}
-              <div className={`settings-row swipe-card${isSwiped?" swiped single":""}`}
-                style={{margin:0,borderRadius:0,border:"none",borderBottom:"1px solid var(--border)"}}
-                onClick={()=>{ if(isSwiped){setSwipedKey(null);return;} startEdit(k); }}
-                onTouchStart={e=>{touchStartX.current=e.touches[0].clientX;}}
-                onTouchEnd={e=>{
-                  if(!canDelete) return;
-                  const dx=touchStartX.current-e.changedTouches[0].clientX;
-                  if(dx>40) setSwipedKey(k);
-                  else if(dx<-20) setSwipedKey(null);
-                }}>
-                <div style={{display:"flex",alignItems:"center",gap:10}}>
-                  <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4,background:col.bg,color:col.color,letterSpacing:".02em"}}>{l.label}</span>
-                  <div>
-                    <div className="s-label">{l.desc||l.label}</div>
-                    <div className="s-sub">每 {l.days} 天{plans.length>0?" · "+plans.map(p=>`${p.name||p.method}`).join("、"):""}</div>
-                  </div>
-                </div>
-                <span style={{fontSize:12,color:"var(--accent-mid)"}}>編輯</span>
-              </div>
-            </div>
-          );
-        })}
-        {adding&&(
-          <div style={{background:"var(--bg)",padding:"14px 16px",borderBottom:"1px solid var(--border)"}}>
-            <label className="inp-label">名稱</label><input className="inp" placeholder="例：高風險" value={newForm.label} onChange={e=>setNewForm(f=>({...f,label:e.target.value}))} autoFocus/>
+
+      {Object.entries(levels).map(([k,l])=>{
+        const col=colorOf(l.colorKey||"yellow"); const plans=loadPlans(k);
+        const isShort = l.label.length<=1;
+
+        if(editKey===k) return (
+          <div key={k} className="card-row" style={{display:"block",cursor:"default"}}>
+            <label className="inp-label">名稱</label><input className="inp" value={form.label} onChange={e=>setForm(x=>({...x,label:e.target.value}))} autoFocus/>
             <div style={{display:"flex",gap:8}}>
               <div style={{flex:1}}>
                 <label className="inp-label">頻率說明</label>
-                <input className="inp" placeholder="例：每月兩次" value={newForm.desc} onChange={e=>setNewForm(f=>({...f,desc:e.target.value}))}/>
+                <input className="inp" value={form.desc} placeholder="例：每週一次" onChange={e=>setForm(x=>({...x,desc:e.target.value}))}/>
               </div>
               <div style={{flex:1}}>
                 <label className="inp-label">間隔天數</label>
-                <input className="inp" type="number" min={1} value={newForm.days} onChange={e=>setNewForm(f=>({...f,days:e.target.value}))}/>
+                <input className="inp" type="number" min={1} value={form.days} onChange={e=>setForm(x=>({...x,days:e.target.value}))}/>
               </div>
             </div>
             <label className="inp-label">顏色</label>
-            <div className="opt-row" style={{marginBottom:8}}>
-              {LEVEL_COLOR_OPTIONS.map(c=><div key={c.key} className={`opt ${newForm.colorKey===c.key?"active":""}`} style={newForm.colorKey===c.key?{background:c.bg,borderColor:c.color,color:c.color}:{}} onClick={()=>setNewForm(f=>({...f,colorKey:c.key}))}>{c.label}</div>)}
+            <div className="opt-row" style={{marginBottom:12}}>
+              {LEVEL_COLOR_OPTIONS.map(c=><div key={c.key} className={`opt ${form.colorKey===c.key?"active":""}`} style={form.colorKey===c.key?{background:c.bg,borderColor:c.color,color:c.color}:{}} onClick={()=>setForm(x=>({...x,colorKey:c.key}))}>{c.label}</div>)}
             </div>
-            <label className="inp-label">識別碼（英文，如 A / B）</label><input className="inp" placeholder="例：H" value={newForm.key} onChange={e=>setNewForm(f=>({...f,key:e.target.value}))} maxLength={4}/>
             <div style={{borderTop:"1px solid var(--border)",marginBottom:12,paddingTop:12}}>
-              <TrackingPlanEditor plans={newPlans} setPlans={setNewPlans} methods={safe}/>
+              <TrackingPlanEditor plans={planEdit} setPlans={setPlanEdit} methods={safe}/>
             </div>
-            {err&&<div className="inp-err">{err}</div>}
+            {editErr&&<div className="inp-err">{editErr}</div>}
             <div style={{display:"flex",gap:6}}>
-              <button className="act-btn primary" style={{flex:2,padding:"8px 0",fontSize:13}} onClick={saveAdd}>建立</button>
-              <button className="act-btn" style={{flex:1,padding:"8px 0",fontSize:13}} onClick={()=>{setAdding(false);setErr("");}}>取消</button>
+              <button className="act-btn primary" style={{flex:2,padding:"8px 0",fontSize:13}} onClick={saveEdit}>儲存</button>
+              {Object.keys(levels).length>1&&<button className="act-btn danger" style={{flex:1,padding:"8px 0",fontSize:13}} onClick={()=>delLevel(k)}>刪除</button>}
+              <button className="act-btn" style={{flex:1,padding:"8px 0",fontSize:13}} onClick={()=>setEditKey(null)}>取消</button>
             </div>
           </div>
-        )}
-      </div>
+        );
+
+        const isSwiped = swipedKey===k;
+        const canDelete = Object.keys(levels).length>1;
+        return (
+          <div className="swipe-row" key={k}>
+            {canDelete&&(
+              <div className="swipe-actions" style={{width:76,justifyContent:"center"}}>
+                <button className="swipe-btn sb-delete" onClick={()=>{delLevel(k);setSwipedKey(null);}}>
+                  <span className="swipe-btn-icon">✕</span>刪除
+                </button>
+              </div>
+            )}
+            <div
+              className={`swipe-card${isSwiped?" swiped single":""}`}
+              onClick={()=>{ if(isSwiped){setSwipedKey(null);return;} startEdit(k); }}
+              onTouchStart={e=>{touchStartX.current=e.touches[0].clientX;}}
+              onTouchEnd={e=>{
+                if(!canDelete) return;
+                const dx=touchStartX.current-e.changedTouches[0].clientX;
+                if(dx>40) setSwipedKey(k);
+                else if(dx<-20) setSwipedKey(null);
+              }}>
+              <div className={`level-circle lc-${l.colorKey||"faint"}${isShort?"":" lc-long"}`}>
+                {l.label}
+              </div>
+              <div className="row-main">
+                <div className="row-nick">{l.desc||l.label}</div>
+                <div className="row-meta">每 {l.days} 天{plans.length>0?" · "+plans.map(p=>`${p.name||p.method}`).join("、"):""}</div>
+              </div>
+              <span style={{fontSize:12,color:"var(--accent-mid)",flexShrink:0}}>編輯</span>
+            </div>
+          </div>
+        );
+      })}
+
+      {adding&&(
+        <div className="card-row" style={{display:"block",cursor:"default"}}>
+          <label className="inp-label">名稱</label><input className="inp" placeholder="例：高風險" value={newForm.label} onChange={e=>setNewForm(f=>({...f,label:e.target.value}))} autoFocus/>
+          <div style={{display:"flex",gap:8}}>
+            <div style={{flex:1}}>
+              <label className="inp-label">頻率說明</label>
+              <input className="inp" placeholder="例：每月兩次" value={newForm.desc} onChange={e=>setNewForm(f=>({...f,desc:e.target.value}))}/>
+            </div>
+            <div style={{flex:1}}>
+              <label className="inp-label">間隔天數</label>
+              <input className="inp" type="number" min={1} value={newForm.days} onChange={e=>setNewForm(f=>({...f,days:e.target.value}))}/>
+            </div>
+          </div>
+          <label className="inp-label">顏色</label>
+          <div className="opt-row" style={{marginBottom:8}}>
+            {LEVEL_COLOR_OPTIONS.map(c=><div key={c.key} className={`opt ${newForm.colorKey===c.key?"active":""}`} style={newForm.colorKey===c.key?{background:c.bg,borderColor:c.color,color:c.color}:{}} onClick={()=>setNewForm(f=>({...f,colorKey:c.key}))}>{c.label}</div>)}
+          </div>
+          <label className="inp-label">識別碼（英文，如 A / B）</label><input className="inp" placeholder="例：H" value={newForm.key} onChange={e=>setNewForm(f=>({...f,key:e.target.value}))} maxLength={4}/>
+          <div style={{borderTop:"1px solid var(--border)",marginBottom:12,paddingTop:12}}>
+            <TrackingPlanEditor plans={newPlans} setPlans={setNewPlans} methods={safe}/>
+          </div>
+          {err&&<div className="inp-err">{err}</div>}
+          <div style={{display:"flex",gap:6}}>
+            <button className="act-btn primary" style={{flex:2,padding:"8px 0",fontSize:13}} onClick={saveAdd}>建立</button>
+            <button className="act-btn" style={{flex:1,padding:"8px 0",fontSize:13}} onClick={()=>{setAdding(false);setErr("");}}>取消</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1796,7 +1821,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.39</span>
+          <span className="s-val">v15.40</span>
         </div>
       </div>
     </div>
