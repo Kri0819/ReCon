@@ -433,7 +433,7 @@ function getCaseStatusLabel(c){
   if(ts){
     if(ts.allDone) return "本期已完成";
     const due=ts.results.filter(r=>r.isDue&&r.done<r.goal);
-    if(due.length) return `${due[0].name||due[0].method} 待完成`;
+    if(due.length) return `${due[0].method} 待完成`;
     const next=ts.results.filter(r=>r.done<r.goal&&r.nextDue).sort((a,b)=>a.nextDue>b.nextDue?1:-1)[0];
     if(next){ const d=daysBetween(TODAY,next.nextDue); return d===0?"今日到期":d===1?"明日":d>0?`${d} 天後`:"待完成"; }
     return "追蹤中";
@@ -452,20 +452,20 @@ function makeInitialCases(){
     { id:"C001", nick:"阿明", level:"A", note:"情緒起伏大，需定期關心",
       archived:false, archivedAt:null, lastContact:ds(-14),
       trackingPlans:[
-        {id:"tp1",name:"電話追蹤",method:"電話",freq:"monthly",anchorDay:null,anchorDow:null,timesPerPeriod:1,nextDue:TODAY},
-        {id:"tp2",name:"面訪",method:"訪視",freq:"monthly",anchorDay:null,anchorDow:null,timesPerPeriod:1,nextDue:ds(5)},
+        {id:"tp1",method:"電話",freq:"monthly",anchorDay:null,anchorDow:null,timesPerPeriod:1,nextDue:TODAY},
+        {id:"tp2",method:"訪視",freq:"monthly",anchorDay:null,anchorDow:null,timesPerPeriod:1,nextDue:ds(5)},
       ],
       logs:[{date:ds(-14),method:"電話",note:"情況穩定，已確認回診",planId:"tp1"},{date:ds(-21),method:"電話",note:"略顯低落，持續追蹤",planId:"tp1"}] },
     { id:"C002", nick:"小芬", level:"E", note:"近期壓力大",
       archived:false, archivedAt:null, lastContact:ds(-22),
       trackingPlans:[
-        {id:"tp3",name:"LINE 關懷",method:"LINE",freq:"weekly",anchorDay:null,anchorDow:5,timesPerPeriod:1,nextDue:TODAY},
+        {id:"tp3",method:"LINE",freq:"weekly",anchorDay:null,anchorDow:5,timesPerPeriod:1,nextDue:TODAY},
       ],
       logs:[{date:ds(-22),method:"LINE",note:"回覆慢，情況待觀察",planId:"tp3"}] },
     { id:"C003", nick:"老王", level:"B", note:"",
       archived:false, archivedAt:null, lastContact:ds(-10),
       trackingPlans:[
-        {id:"tp4",name:"電話追蹤",method:"電話",freq:"biweekly",anchorDay:null,anchorDow:null,timesPerPeriod:1,nextDue:ds(4)},
+        {id:"tp4",method:"電話",freq:"biweekly",anchorDay:null,anchorDow:null,timesPerPeriod:1,nextDue:ds(4)},
       ],
       logs:[{date:ds(-10),method:"電話",note:"良好，下次兩週後",planId:"tp4"}] },
     { id:"C004", nick:"淑惠", level:"C", note:"月底壓力較大",
@@ -517,11 +517,10 @@ function TrackingPlanEditor({ plans, setPlans, methods }){
 
   function add(){
     if(!form.method) return;
-    const name = form.method; // 任務名稱直接用聯絡方式，不重複輸入
     const nextDue = calcPlanNextDue({...form}, TODAY);
-    setPlans(prev=>[...prev,{...form, id:genPlanId(), name, nextDue}]);
+    setPlans(prev=>[...prev,{...form, id:genPlanId(), nextDue}]);
     setAdding(false);
-    setForm({name:"",method:safe[0],freq:"monthly",anchorDay:null,anchorDow:null,timesPerPeriod:1});
+    setForm({method:safe[0],freq:"monthly",anchorDay:null,anchorDow:null,timesPerPeriod:1});
   }
   function remove(id){ setPlans(prev=>prev.filter(p=>p.id!==id)); }
 
@@ -539,7 +538,7 @@ function TrackingPlanEditor({ plans, setPlans, methods }){
       {plans.map(p=>(
         <div key={p.id} className="task-item">
           <div style={{flex:1}}>
-            <div style={{fontSize:13,fontWeight:500}}>{p.name||p.method}</div>
+            <div style={{fontSize:13,fontWeight:500}}>{p.method}</div>
             <div style={{fontSize:11,color:"var(--muted)",marginTop:1}}>
               {p.method} · {FREQ_OPTIONS.find(f=>f.key===p.freq)?.label} · {p.timesPerPeriod}次
               {p.nextDue?` · 下次 ${p.nextDue.slice(5)}`:""}
@@ -633,7 +632,7 @@ function LogModal({ case_:c, methods, onClose, onSave }){
                 <div key={p.id} className="plan-pick-row"
                   onClick={()=>onPlanChange(p)}>
                   <div>
-                    <div style={{fontSize:13,fontWeight:500}}>{p.name||p.method}</div>
+                    <div style={{fontSize:13,fontWeight:500}}>{p.method}</div>
                     <div style={{fontSize:11,color:"var(--muted)"}}>{p.method} · {FREQ_OPTIONS.find(f=>f.key===p.freq)?.label}</div>
                   </div>
                   <div style={{width:20,height:20,borderRadius:"50%",border:`2px solid ${planId===p.id?"var(--accent)":"var(--border)"}`,background:planId===p.id?"var(--accent)":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
@@ -1126,7 +1125,7 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
             <div key={i} className="plan-row" style={{flexDirection:"column",alignItems:"stretch",gap:8}}>
               <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between"}}>
                 <div style={{flex:1}}>
-                  <div className="plan-name">{r.name||r.method}</div>
+                  <div className="plan-name">{r.method}</div>
                   <div className="plan-freq">{r.method} · {FREQ_OPTIONS.find(f=>f.key===r.freq)?.label}</div>
                 </div>
                 <div className={`plan-prog ${r.done>=r.goal?"done":"todo"}`}>
@@ -1212,7 +1211,7 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
             <div className="log-body" style={{flex:1}}>
               <div className="log-date">
                 {log.date}{log.time?` ${log.time}`:""} · <span style={{background:"var(--surface2)",padding:"1px 7px",borderRadius:4,fontSize:11}}>{log.method}</span>
-                {log.planId&&(()=>{const p=c.trackingPlans?.find(p=>p.id===log.planId);return p?<span style={{marginLeft:4,fontSize:10,color:"var(--accent-mid)"}}>{p.name||p.method}</span>:null;})()}
+                {log.planId&&(()=>{const p=c.trackingPlans?.find(p=>p.id===log.planId);return p?<span style={{marginLeft:4,fontSize:10,color:"var(--accent-mid)"}}>{p.method}</span>:null;})()}
               </div>
               <div className="log-note" style={{marginTop:3}}>{log.note}</div>
             </div>
@@ -1326,7 +1325,7 @@ function BookingsModal({ case_:c, onClose, onAddNew, onEditBooking }){
               <div key={i} className="plan-pick-row" style={{cursor:"pointer"}}
                 onClick={()=>onEditBooking(b.plan,b)}>
                 <div>
-                  <div style={{fontSize:13,fontWeight:500}}>{b.plan.name||b.plan.method}</div>
+                  <div style={{fontSize:13,fontWeight:500}}>{b.plan.method}</div>
                   <div style={{fontSize:11,color:"var(--muted)"}}>{b.plan.method}{b.note?` · ${b.note}`:""}</div>
                 </div>
                 <div style={{fontSize:13,fontWeight:600,color:"var(--accent)",flexShrink:0}}>
@@ -1362,7 +1361,7 @@ function VisitModal({ case_:c, methods, editPlan, lockMethod, onClose, onSave, o
     <div className="overlay center" onClick={onClose}>
       <div className="sheet center" onClick={e=>e.stopPropagation()}>
         <div className="sheet-title">{isEdit?"編輯預約":"預約訪視"}</div>
-        <div className="sheet-sub" style={{marginBottom:16}}>{c.nick}{isEdit?` · ${editPlan.name||editPlan.method}`:""}</div>
+        <div className="sheet-sub" style={{marginBottom:16}}>{c.nick}{isEdit?` · ${editPlan.method}`:""}</div>
 
         <label className="inp-label">日期與時間</label>
         <div style={{display:"flex",gap:8,marginBottom:14}}>
@@ -1374,7 +1373,7 @@ function VisitModal({ case_:c, methods, editPlan, lockMethod, onClose, onSave, o
           <>
             <label className="inp-label">追蹤任務</label>
             <select className="inp" value={planId||""} onChange={e=>setPlanId(e.target.value)}>
-              {plans.map(p=><option key={p.id} value={p.id}>{p.name||p.method}（{p.method}）</option>)}
+              {plans.map(p=><option key={p.id} value={p.id}>{p.method}</option>)}
             </select>
           </>
         )}
@@ -1428,7 +1427,7 @@ function CalendarScreen({ cases, onOpen }){
     (c.trackingPlans||[]).forEach(p=>{
       if(p.nextDue){
         if(!eventMap[p.nextDue])eventMap[p.nextDue]=[];
-        eventMap[p.nextDue].push({nick:c.nick,time:p.visitTime||"",type:p.name||p.method,id:c.id});
+        eventMap[p.nextDue].push({nick:c.nick,time:p.visitTime||"",type:p.method,id:c.id});
       }
     });
     // No tracking plans = not shown on calendar
@@ -1551,12 +1550,12 @@ function LevelsPage({ levels, setLevels, methods, onBack }){
     setEditKey(null);
   }
   function delLevel(k){if(Object.keys(levels).length<=1)return;setLevels(prev=>{const n={...prev};delete n[k];return n;});setEditKey(null);}
-  function startAdd(){setAdding(true);setEditKey(null);setNewForm({key:"",label:"",days:14,desc:"",colorKey:"yellow"});setNewPlans([]);setErr("");}
+  function startAdd(){setAdding(true);setEditKey(null);setNewForm({label:"",days:14,desc:"",colorKey:"yellow"});setNewPlans([]);setErr("");}
   function saveAdd(){
-    const k=newForm.key.trim().toUpperCase();
-    if(!k||!newForm.label.trim()){setErr("請填寫 ID 和名稱");return;}
-    if(levels[k]){setErr(`ID「${k}」已存在`);return;}
+    if(!newForm.label.trim()){setErr("請填寫名稱");return;}
     if(newPlans.length===0){setErr("每個等級至少需要一個追蹤任務");return;}
+    // 內部識別碼自動產生，使用者不需要理解或填寫
+    const k = `LV${Date.now()}`;
     setLevels(prev=>({...prev,[k]:{label:newForm.label.trim(),days:Math.max(1,Number(newForm.days)||14),desc:(newForm.desc||"").trim(),colorKey:newForm.colorKey}}));
     savePlans(k,newPlans);
     setAdding(false);
@@ -1625,7 +1624,7 @@ function LevelsPage({ levels, setLevels, methods, onBack }){
               </div>
               <div className="row-main">
                 <div className="row-nick">{l.desc||l.label}</div>
-                <div className="row-meta">每 {l.days} 天{plans.length>0?" · "+plans.map(p=>`${p.name||p.method}`).join("、"):""}</div>
+                <div className="row-meta">每 {l.days} 天{plans.length>0?" · "+plans.map(p=>p.method).join("、"):""}</div>
               </div>
               <span style={{fontSize:12,color:"var(--accent-mid)",flexShrink:0}}>編輯</span>
             </div>
@@ -1635,7 +1634,15 @@ function LevelsPage({ levels, setLevels, methods, onBack }){
 
       {adding&&(
         <div className="card-row" style={{display:"block",cursor:"default"}}>
-          <label className="inp-label">名稱</label><input className="inp" placeholder="例：高風險" value={newForm.label} onChange={e=>setNewForm(f=>({...f,label:e.target.value}))} autoFocus/>
+          <label className="inp-label">名稱（會顯示在個案列表的圓圈標籤裡，1-4 個字為佳）</label>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+            <div className={`level-circle lc-${newForm.colorKey||"faint"}${newForm.label.length>1?" lc-long":""}`}
+              style={{flexShrink:0}}>
+              {newForm.label||"？"}
+            </div>
+            <input className="inp" style={{flex:1,marginBottom:0}} placeholder="例：高風險 或 H"
+              value={newForm.label} onChange={e=>setNewForm(f=>({...f,label:e.target.value}))} autoFocus/>
+          </div>
           <div style={{display:"flex",gap:8}}>
             <div style={{flex:1}}>
               <label className="inp-label">頻率說明</label>
@@ -1650,7 +1657,6 @@ function LevelsPage({ levels, setLevels, methods, onBack }){
           <div className="opt-row" style={{marginBottom:8}}>
             {LEVEL_COLOR_OPTIONS.map(c=><div key={c.key} className={`opt ${newForm.colorKey===c.key?"active":""}`} style={newForm.colorKey===c.key?{background:c.bg,borderColor:c.color,color:c.color}:{}} onClick={()=>setNewForm(f=>({...f,colorKey:c.key}))}>{c.label}</div>)}
           </div>
-          <label className="inp-label">識別碼（英文，如 A / B）</label><input className="inp" placeholder="例：H" value={newForm.key} onChange={e=>setNewForm(f=>({...f,key:e.target.value}))} maxLength={4}/>
           <div style={{borderTop:"1px solid var(--border)",marginBottom:12,paddingTop:12}}>
             <TrackingPlanEditor plans={newPlans} setPlans={setNewPlans} methods={safe}/>
           </div>
@@ -1735,7 +1741,7 @@ function ExportCenterPage({ cases, levels, methods, onBack, showToast }){
   function dl(content,filename,type){const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=filename;a.click();URL.revokeObjectURL(url);}
   function exportCSV(){
     const header=["暱稱","編號","等級","上次聯絡","備註","追蹤計畫"];
-    const rows=cases.map(c=>[c.nick??"",c.id??"",levels[c.level]?.label||c.level||"",c.lastContact??"",c.note??"",(c.trackingPlans||[]).map(p=>`${p.name||p.method}/${FREQ_OPTIONS.find(f=>f.key===p.freq)?.label||p.freq}/${p.timesPerPeriod}次`).join("; ")]);
+    const rows=cases.map(c=>[c.nick??"",c.id??"",levels[c.level]?.label||c.level||"",c.lastContact??"",c.note??"",(c.trackingPlans||[]).map(p=>`${p.method}/${FREQ_OPTIONS.find(f=>f.key===p.freq)?.label||p.freq}/${p.timesPerPeriod}次`).join("; ")]);
     dl("\uFEFF"+[header,...rows].map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n"),"ReCon_export.csv","text/csv;charset=utf-8;");
     showToast("已匯出 CSV");
   }
@@ -1821,7 +1827,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.40</span>
+          <span className="s-val">v15.41</span>
         </div>
       </div>
     </div>
