@@ -30,6 +30,8 @@ html,body{height:100%;background:var(--bg);font-family:var(--sans);font-size:14p
 .screen{flex:1;overflow-y:auto;overflow-x:hidden}
 .screen::-webkit-scrollbar{display:none}
 .screen-pad{padding-bottom:24px}
+.tab-shell{height:100%;display:flex;flex-direction:column}
+.tab-scroll{flex:1;overflow-y:auto}
 .bnav{display:flex;background:var(--surface);border-top:1px solid var(--border);padding:10px 0 calc(env(safe-area-inset-bottom,0px) + 14px);flex-shrink:0;backdrop-filter:blur(12px);opacity:.97}
 .bnav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;border:none;background:none;cursor:pointer;padding:4px 0;font-family:var(--sans)}
 .bnav-icon{font-size:19px;opacity:.3;transition:opacity .12s}
@@ -128,7 +130,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--sans);font-size:14p
 /* Settings */
 .settings-group{margin:0 16px 4px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
 .settings-row{display:flex;align-items:center;justify-content:space-between;padding:15px 18px;border-bottom:1px solid var(--border);min-height:54px;cursor:pointer;transition:background .1s}
-.archive-entry{display:flex;align-items:center;justify-content:space-between;margin:8px 22px 0;padding:14px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);cursor:pointer;transition:opacity .12s}
+.archive-entry{display:flex;align-items:center;justify-content:space-between;margin:10px 22px 14px;padding:14px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);cursor:pointer;transition:opacity .12s;flex-shrink:0}
 .archive-entry:active{opacity:.7}
 .settings-row:last-child{border-bottom:none}
 .settings-row:active{background:var(--surface2)}
@@ -904,36 +906,45 @@ function CasesScreen({ cases, methods, levels, onAdd, onOpen, updateCase, delete
   const [page,        setPage]        = useState("list"); // list | archived
   const [swipedId,    setSwipedId]    = useState(null);
   const [delConfId,   setDelConfId]   = useState(null);
-  const [levelFilter, setLevelFilter] = useState(null); // null = 全部
+  const [levelFilters, setLevelFilters] = useState(()=>new Set()); // 空集合 = 全部
   const touchStartX = useRef(0);
   const active   = cases.filter(c=>!c.archived);
   const archivedCount = cases.filter(c=>c.archived).length;
-  const filtered = levelFilter ? active.filter(c=>c.level===levelFilter) : active;
+  const filtered = levelFilters.size>0 ? active.filter(c=>levelFilters.has(c.level)) : active;
   const sorted   = [...filtered].sort((a,b)=>order2(getCaseStatus(a))-order2(getCaseStatus(b)));
+
+  function toggleLevel(k){
+    setLevelFilters(prev=>{
+      const next=new Set(prev);
+      if(next.has(k)) next.delete(k); else next.add(k);
+      return next;
+    });
+  }
 
   if(page==="archived") return <ArchivedPage cases={cases} updateCase={updateCase} deleteCase={deleteCase} onBack={()=>setPage("list")} showToast={showToast}/>;
 
   return (
-    <div className="screen-pad">
+    <div className="tab-shell">
       <div className="ph">
         <div><div className="ph-eyebrow">追蹤中的個案</div><div className="ph-title">個案列表</div></div>
         <button className="ph-action" onClick={onAdd}>＋ 新增</button>
       </div>
       <div className="filter-row">
-        <div className={`filter-chip ${levelFilter===null?"active":""}`}
-          onClick={()=>setLevelFilter(null)}>全部</div>
+        <div className={`filter-chip ${levelFilters.size===0?"active":""}`}
+          onClick={()=>setLevelFilters(new Set())}>全部</div>
         {Object.entries(levels).map(([k,l])=>{
           const cnt = active.filter(c=>c.level===k).length;
           if(cnt===0) return null;
           return (
-            <div key={k} className={`filter-chip ${levelFilter===k?"active":""}`}
-              onClick={()=>setLevelFilter(levelFilter===k?null:k)}>
+            <div key={k} className={`filter-chip ${levelFilters.has(k)?"active":""}`}
+              onClick={()=>toggleLevel(k)}>
               {l.label}
             </div>
           );
         })}
       </div>
-      {filtered.length===0&&<div className="empty">{levelFilter?`沒有${levels[levelFilter]?.label}的個案`:"目前沒有聯絡中的個案"}<br/>{levelFilter?"":"點右上角新增"}</div>}
+      <div className="screen-pad tab-scroll">
+      {filtered.length===0&&<div className="empty">{levelFilters.size>0?`沒有${[...levelFilters].map(k=>levels[k]?.label).join("、")}的個案`:"目前沒有聯絡中的個案"}<br/>{levelFilters.size>0?"":"點右上角新增"}</div>}
       {sorted.map(c=>{
         const st=getCaseStatus(c);
         const isSwiped=swipedId===c.id, isDelConf=delConfId===c.id;
@@ -1019,6 +1030,7 @@ function CasesScreen({ cases, methods, levels, onAdd, onOpen, updateCase, delete
           </div>
         );
       })}
+      </div>
       <div className="archive-entry" onClick={()=>setPage("archived")}>
         <div>
           <div style={{fontSize:13,fontWeight:500,color:"var(--text2)"}}>封存的個案</div>
@@ -1896,7 +1908,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.45</span>
+          <span className="s-val">v15.46</span>
         </div>
       </div>
     </div>
