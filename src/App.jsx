@@ -92,6 +92,11 @@ html,body{height:100%;background:var(--bg);font-family:var(--sans);font-size:14p
 .log-body{flex:1}
 .log-date{font-size:11px;color:var(--muted);margin-bottom:3px}
 .log-note{font-size:13px;color:var(--text2)}
+.log-kebab{font-size:15px;color:var(--muted);flex-shrink:0;background:none;border:none;cursor:pointer;padding:6px 8px;min-height:32px;font-family:var(--sans);-webkit-tap-highlight-color:transparent}
+.kebab-menu{position:absolute;right:22px;top:100%;margin-top:2px;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 6px 20px rgba(18,16,12,.14);overflow:hidden;z-index:50;min-width:96px}
+.kebab-menu-item{display:block;width:100%;text-align:left;padding:10px 16px;font-size:13px;background:none;border:none;cursor:pointer;color:var(--text2);font-family:var(--sans)}
+.kebab-menu-item:active{background:var(--surface2)}
+.kebab-menu-item.danger{color:var(--red)}
 /* Calendar */
 .cal-wrap{margin:0 18px;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;background:var(--surface)}
 .cal-head{display:flex;border-bottom:1px solid var(--border)}
@@ -540,7 +545,7 @@ function TrackingPlanEditor({ plans, setPlans, methods }){
           <div style={{flex:1}}>
             <div style={{fontSize:13,fontWeight:500}}>{p.method}</div>
             <div style={{fontSize:11,color:"var(--muted)",marginTop:1}}>
-              {p.method} · {FREQ_OPTIONS.find(f=>f.key===p.freq)?.label} · {p.timesPerPeriod}次
+              {FREQ_OPTIONS.find(f=>f.key===p.freq)?.label} · {p.timesPerPeriod}次
               {p.nextDue?` · 下次 ${p.nextDue.slice(5)}`:""}
             </div>
           </div>
@@ -633,7 +638,7 @@ function LogModal({ case_:c, methods, onClose, onSave }){
                   onClick={()=>onPlanChange(p)}>
                   <div>
                     <div style={{fontSize:13,fontWeight:500}}>{p.method}</div>
-                    <div style={{fontSize:11,color:"var(--muted)"}}>{p.method} · {FREQ_OPTIONS.find(f=>f.key===p.freq)?.label}</div>
+                    <div style={{fontSize:11,color:"var(--muted)"}}>{FREQ_OPTIONS.find(f=>f.key===p.freq)?.label}</div>
                   </div>
                   <div style={{width:20,height:20,borderRadius:"50%",border:`2px solid ${planId===p.id?"var(--accent)":"var(--border)"}`,background:planId===p.id?"var(--accent)":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                     {planId===p.id&&<div style={{width:8,height:8,borderRadius:"50%",background:"#fff"}}/>}
@@ -662,10 +667,10 @@ function LogModal({ case_:c, methods, onClose, onSave }){
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EDIT CASE MODAL
+// EDIT CASE PAGE (full page)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function EditCaseModal({ case_:c, methods, levels, onClose, onSave, onDelete }){
+function EditCasePage({ case_:c, methods, levels, onBack, onSave, onDelete }){
   const safe = methods.length>0?methods:["電話"];
   const [nick,          setNick]    = useState(c.nick);
   const [note,          setNote]    = useState(c.note||"");
@@ -677,14 +682,18 @@ function EditCaseModal({ case_:c, methods, levels, onClose, onSave, onDelete }){
   function save(){
     if(!nick.trim()){setErr("暱稱不能空白");return;}
     onSave(c.id,{nick:nick.trim(),note:note.trim(),level,trackingPlans});
-    onClose();
+    onBack();
   }
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="sheet" onClick={e=>e.stopPropagation()}>
-        <div className="sheet-handle"/>
-        <div className="sheet-title">編輯個案</div>
+    <div className="screen-pad">
+      <div className="ph">
+        <div>
+          <button className="back-btn" onClick={onBack}>‹ 返回</button>
+          <div className="det-title">編輯個案</div>
+        </div>
+      </div>
+      <div style={{padding:"0 22px"}}>
         <div className="sheet-sub">{c.id}</div>
         <label className="inp-label">暱稱／代號</label>
         <input className="inp" value={nick} onChange={e=>{setNick(e.target.value);setErr("");}} maxLength={20} autoFocus/>
@@ -707,13 +716,13 @@ function EditCaseModal({ case_:c, methods, levels, onClose, onSave, onDelete }){
             <div style={{fontSize:12,color:"var(--muted)",marginBottom:10,lineHeight:1.6}}>此操作無法復原。若暫時不需聯絡，建議改用「封存個案」。</div>
             <div style={{display:"flex",gap:8}}>
               <button className="act-btn" style={{flex:1}} onClick={()=>setConfDel(false)}>取消</button>
-              <button className="act-btn danger" style={{flex:1}} onClick={()=>{onDelete(c.id);onClose();}}>確認刪除</button>
+              <button className="act-btn danger" style={{flex:1}} onClick={()=>{onDelete(c.id);onBack();}}>確認刪除</button>
             </div>
           </div>
         ):(
           <div className="btn-row">
             <button className="act-btn danger" style={{flex:"0 0 auto",padding:"0 16px"}} onClick={()=>setConfDel(true)}>刪除</button>
-            <button className="act-btn" style={{flex:1}} onClick={onClose}>取消</button>
+            <button className="act-btn" style={{flex:1}} onClick={onBack}>取消</button>
             <button className="act-btn primary" style={{flex:1}} onClick={save}>儲存</button>
           </div>
         )}
@@ -722,11 +731,11 @@ function EditCaseModal({ case_:c, methods, levels, onClose, onSave, onDelete }){
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ADD CASE MODAL
+
+// ADD CASE PAGE (full page)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function AddCaseModal({ existingCases, levels, methods, onClose, onSave }){
+function AddCasePage({ existingCases, levels, methods, onBack, onSave }){
   const safe = methods.length>0?methods:["電話"];
   const [step,  setStep]  = useState(0);
   const [nick,  setNick]  = useState("");
@@ -750,15 +759,19 @@ function AddCaseModal({ existingCases, levels, methods, onClose, onSave }){
   function save(){
     onSave({id:autoId,nick:nick.trim(),note:note.trim(),level,archived:false,archivedAt:null,
       lastContact:TODAY,trackingPlans:plans,logs:[]});
-    onClose();
+    onBack();
   }
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="sheet" onClick={e=>e.stopPropagation()}>
-        <div className="sheet-handle"/>
+    <div className="screen-pad">
+      <div className="ph">
+        <div>
+          <button className="back-btn" onClick={()=>step===0?onBack():setStep(0)}>‹ 返回</button>
+          <div className="det-title">{step===0?"新增個案":"追蹤設定"}</div>
+        </div>
+      </div>
+      <div style={{padding:"0 22px"}}>
         <StepBar total={2} current={step}/>
-        <div className="sheet-title">{step===0?"新增個案":"追蹤設定"}</div>
         <div className="sheet-sub">{step===0?`編號：${autoId}`:"選擇等級並設定追蹤計畫"}</div>
         {step===0&&<>
           <label className="inp-label">暱稱（不可使用真實姓名）</label>
@@ -767,7 +780,7 @@ function AddCaseModal({ existingCases, levels, methods, onClose, onSave }){
           <label className="inp-label">備註（選填）</label>
           <input className="inp" placeholder="簡短備忘…" value={note} onChange={e=>setNote(e.target.value)} maxLength={60}/>
           <div className="btn-row">
-            <button className="act-btn" onClick={onClose}>取消</button>
+            <button className="act-btn" onClick={onBack}>取消</button>
             <button className="act-btn primary" onClick={next}>下一步</button>
           </div>
         </>}
@@ -1020,56 +1033,87 @@ function CasesScreen({ cases, methods, levels, onAdd, onOpen, updateCase, delete
 // ─────────────────────────────────────────────────────────────────────────────
 
 
-function EditLogPanel({ log, methods, onClose, onSave, onDelete }) {
-  const [date,       setDate]   = useState(log.date||TODAY);
-  const [time,       setTime]   = useState(log.time||"");
-  const [method,     setMethod] = useState(log.method||(methods[0]||"電話"));
-  const [note,       setNote]   = useState(log.note||"");
-  const [confirmDel, setConfirmDel] = useState(false);
+function EditLogModal({ case_:c, log, methods, onClose, onSave }){
+  const safe = methods.length>0?methods:["電話"];
+  const plans = c.trackingPlans||[];
+  const [method, setMethod] = useState(log.method||safe[0]);
+  const [planId, setPlanId] = useState(log.planId||null);
+  const [date,   setDate]   = useState(log.date||TODAY);
+  const [time,   setTime]   = useState(log.time||"");
+  const [note,   setNote]   = useState(log.note||"");
+
+  function onMethodChange(m){
+    setMethod(m);
+    const match = plans.find(p=>p.method===m);
+    setPlanId(match ? match.id : null);
+  }
+  function onPlanChange(p){
+    setPlanId(p?p.id:null);
+    if(p) setMethod(p.method);
+  }
+
   return (
-    <div style={{margin:"-4px 22px 8px 50px",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"0 0 var(--r) var(--r)",padding:"12px 14px"}}>
-      {confirmDel ? (
-        <>
-          <div style={{fontSize:12,color:"var(--red)",marginBottom:8}}>確認刪除這筆紀錄？</div>
-          <div style={{display:"flex",gap:6}}>
-            <button className="act-btn" style={{flex:1,fontSize:12}} onClick={()=>setConfirmDel(false)}>取消</button>
-            <button className="act-btn danger" style={{flex:1,fontSize:12}} onClick={onDelete}>確認刪除</button>
-          </div>
-        </>
-      ) : (
-        <>
-          <div style={{display:"flex",gap:8,marginBottom:8}}>
-            <input type="date" className="inp" style={{flex:1,marginBottom:0,height:36,padding:"0 10px",fontSize:12}}
-              value={date} onChange={e=>setDate(e.target.value)}/>
-            <select className="inp" style={{flex:1,marginBottom:0,height:36,padding:"0 8px",fontSize:12}}
-              value={method} onChange={e=>setMethod(e.target.value)}>
-              {(methods||["電話"]).map(m=><option key={m} value={m}>{m}</option>)}
-            </select>
-          </div>
-          <input type="time" className="inp" style={{marginBottom:8,height:36,padding:"0 10px",fontSize:12}}
-            value={time} onChange={e=>setTime(e.target.value)} placeholder="時間（選填）"/>
-          <input className="inp" style={{marginBottom:8,height:36,padding:"0 10px",fontSize:12}}
-            value={note} onChange={e=>setNote(e.target.value)} placeholder="備註（選填）" maxLength={120}/>
-          <div style={{display:"flex",gap:6}}>
-            <button className="act-btn danger" style={{fontSize:11,padding:"4px 10px"}} onClick={()=>setConfirmDel(true)}>刪除</button>
-            <button className="act-btn" style={{flex:1,fontSize:12}} onClick={onClose}>取消</button>
-            <button className="act-btn primary" style={{flex:1,fontSize:12}}
-              onClick={()=>onSave({...log,date,time,method,note})}>儲存</button>
-          </div>
-        </>
-      )}
+    <div className="overlay center" onClick={onClose}>
+      <div className="sheet center" onClick={e=>e.stopPropagation()}>
+        <div className="sheet-title">編輯聯絡紀錄</div>
+        <div className="sheet-sub" style={{marginBottom:16}}>{c.nick}</div>
+
+        <label className="inp-label">日期與時間</label>
+        <div style={{display:"flex",gap:8,marginBottom:14}}>
+          <input type="date" className="inp" style={{flex:1,marginBottom:0}} value={date} max={TODAY} onChange={e=>setDate(e.target.value)}/>
+          <input type="time" className="inp" style={{flex:1,marginBottom:0}} value={time} onChange={e=>setTime(e.target.value)}/>
+        </div>
+
+        <label className="inp-label">聯絡方式</label>
+        <select className="inp" value={method} onChange={e=>onMethodChange(e.target.value)}>
+          {safe.map(m=><option key={m} value={m}>{m}</option>)}
+        </select>
+
+        {plans.length>0&&(
+          <>
+            <label className="inp-label">關聯追蹤任務</label>
+            <div style={{marginBottom:14}}>
+              {plans.map(p=>(
+                <div key={p.id} className="plan-pick-row" onClick={()=>onPlanChange(p)}>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:500}}>{p.method}</div>
+                    <div style={{fontSize:11,color:"var(--muted)"}}>{FREQ_OPTIONS.find(f=>f.key===p.freq)?.label}</div>
+                  </div>
+                  <div style={{width:20,height:20,borderRadius:"50%",border:`2px solid ${planId===p.id?"var(--accent)":"var(--border)"}`,background:planId===p.id?"var(--accent)":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    {planId===p.id&&<div style={{width:8,height:8,borderRadius:"50%",background:"#fff"}}/>}
+                  </div>
+                </div>
+              ))}
+              <div className="plan-pick-row" onClick={()=>onPlanChange(null)}>
+                <div style={{fontSize:13,color:"var(--muted)"}}>不關聯追蹤任務</div>
+                <div style={{width:20,height:20,borderRadius:"50%",border:`2px solid ${planId===null?"var(--accent)":"var(--border)"}`,background:planId===null?"var(--accent)":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  {planId===null&&<div style={{width:8,height:8,borderRadius:"50%",background:"#fff"}}/>}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        <label className="inp-label">備註（選填）</label>
+        <input className="inp" placeholder="一兩句即可…" value={note} onChange={e=>setNote(e.target.value)} maxLength={120}/>
+        <div className="btn-row">
+          <button className="act-btn" onClick={onClose}>取消</button>
+          <button className="act-btn primary" onClick={()=>onSave({...log,date,time,method,note:note.trim(),planId:planId||undefined})}>儲存</button>
+        </div>
+      </div>
     </div>
   );
 }
 
-function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast }){
+function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast, onEditCase }){
   const [logModal,       setLogModal]       = useState(false);
   const [visitModal,     setVisitModal]     = useState(false);
   const [editVisitPlan,  setEditVisitPlan]  = useState(null);
   const [bookingsModal,  setBookingsModal]  = useState(false);
-  const [editLogIdx,     setEditLogIdx]     = useState(null); // index of log being edited
+  const [logMenuIdx,     setLogMenuIdx]     = useState(null); // index of log whose kebab menu is open
+  const [editLogEntry,   setEditLogEntry]   = useState(null); // {log, idx} being edited via center modal
+  const [deleteLogIdx,   setDeleteLogIdx]   = useState(null); // index pending delete confirmation
   const [archiveConfirm, setArchiveConfirm] = useState(false);
-  const [editModal,      setEditModal]      = useState(false);
   const ts = getTrackStatus(c);
   const thisMonth = TODAY.slice(0,7);
   const monthVisitDone = (c.logs||[]).some(l=>l.date?.startsWith(thisMonth)&&(l.method==="訪視"||l.method==="家訪"));
@@ -1088,7 +1132,6 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
     });
     showToast("已記錄");
   }
-  function handleEditSave(id,patch){ updateCase(id,()=>patch); showToast("已更新"); }
 
   return (
     <div className="screen-pad">
@@ -1101,8 +1144,8 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
           </div>
         </div>
         <div style={{display:"flex",gap:8}}>
-          <button className="ph-action" style={{color:"var(--yellow)"}} onClick={()=>setArchiveConfirm(v=>!v)}>封存</button>
-          <button className="ph-action" onClick={()=>setEditModal(true)}>編輯</button>
+          <button className="ph-action" style={{color:"var(--yellow)"}} onClick={()=>setArchiveConfirm(true)}>封存</button>
+          <button className="ph-action" onClick={()=>onEditCase(c.id)}>編輯</button>
         </div>
       </div>
 
@@ -1126,7 +1169,7 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
               <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between"}}>
                 <div style={{flex:1}}>
                   <div className="plan-name">{r.method}</div>
-                  <div className="plan-freq">{r.method} · {FREQ_OPTIONS.find(f=>f.key===r.freq)?.label}</div>
+                  <div className="plan-freq">{FREQ_OPTIONS.find(f=>f.key===r.freq)?.label}</div>
                 </div>
                 <div className={`plan-prog ${r.done>=r.goal?"done":"todo"}`}>
                   {r.done}/{r.goal} {r.done>=r.goal?"✓":"⚠"}
@@ -1187,14 +1230,16 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
       </div>
 
       {archiveConfirm&&(
-        <div style={{margin:"0 16px 12px",background:"var(--yellow-bg)",border:"1px solid #EDD9A0",borderRadius:"var(--r)",padding:"14px 16px"}}>
-          <div style={{fontSize:14,fontWeight:500,marginBottom:6}}>封存此個案？</div>
-          <div style={{fontSize:12,color:"var(--muted)",lineHeight:1.7,marginBottom:12}}>
-            封存後不會出現在首頁及個案管理，所有聯絡紀錄完整保留。
-          </div>
-          <div style={{display:"flex",gap:8}}>
-            <button className="act-btn" style={{flex:1}} onClick={()=>setArchiveConfirm(false)}>取消</button>
-            <button className="act-btn primary" style={{flex:1}} onClick={()=>{updateCase(c.id,()=>({archived:true,archivedAt:new Date().toISOString()}));showToast("已封存個案");onBack();}}>確認封存</button>
+        <div className="overlay center" onClick={()=>setArchiveConfirm(false)}>
+          <div className="sheet center" onClick={e=>e.stopPropagation()}>
+            <div className="sheet-title">封存此個案？</div>
+            <div className="sheet-sub" style={{marginBottom:16}}>
+              封存後不會出現在首頁及個案管理，所有聯絡紀錄完整保留。
+            </div>
+            <div className="btn-row">
+              <button className="act-btn" onClick={()=>setArchiveConfirm(false)}>取消</button>
+              <button className="act-btn primary" onClick={()=>{updateCase(c.id,()=>({archived:true,archivedAt:new Date().toISOString()}));showToast("已封存個案");onBack();}}>確認封存</button>
+            </div>
           </div>
         </div>
       )}
@@ -1205,36 +1250,55 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
       </div>
       {(!c.logs||c.logs.length===0)&&<div style={{margin:"0 16px 12px",padding:"12px 14px",background:"var(--surface2)",borderRadius:"var(--r)",fontSize:12,color:"var(--muted)"}}>尚無聯絡紀錄，點「記錄聯絡」開始記錄。</div>}
       {(c.logs||[]).map((log,i)=>(
-        <div key={i}>
-          <div className="log-item" style={{cursor:"pointer"}} onClick={()=>setEditLogIdx(editLogIdx===i?null:i)}>
+        <div key={i} style={{position:"relative"}}>
+          <div className="log-item">
             <div className="log-line"/>
             <div className="log-body" style={{flex:1}}>
               <div className="log-date">
                 {log.date}{log.time?` ${log.time}`:""} · <span style={{background:"var(--surface2)",padding:"1px 7px",borderRadius:4,fontSize:11}}>{log.method}</span>
-                {log.planId&&(()=>{const p=c.trackingPlans?.find(p=>p.id===log.planId);return p?<span style={{marginLeft:4,fontSize:10,color:"var(--accent-mid)"}}>{p.method}</span>:null;})()}
               </div>
               <div className="log-note" style={{marginTop:3}}>{log.note}</div>
             </div>
-            <div style={{fontSize:11,color:"var(--muted)",flexShrink:0,alignSelf:"center"}}>⋯</div>
+            <button className="log-kebab" onClick={()=>setLogMenuIdx(logMenuIdx===i?null:i)}>⋯</button>
           </div>
-          {editLogIdx===i&&(
-            <EditLogPanel log={log} idx={i} onClose={()=>setEditLogIdx(null)}
-              methods={methods}
-              onSave={(newLog)=>{
-                updateCase(c.id,prev=>({
-                  logs:prev.logs.map((l,j)=>j===i?newLog:l)
-                }));
-                setEditLogIdx(null); showToast("已更新");
-              }}
-              onDelete={()=>{
-                updateCase(c.id,prev=>({
-                  logs:prev.logs.filter((_,j)=>j!==i)
-                }));
-                setEditLogIdx(null); showToast("已刪除");
-              }}/>
+          {logMenuIdx===i&&(
+            <>
+              <div style={{position:"fixed",inset:0,zIndex:40}} onClick={()=>setLogMenuIdx(null)}/>
+              <div className="kebab-menu">
+                <button className="kebab-menu-item" onClick={()=>{setEditLogEntry({log,idx:i});setLogMenuIdx(null);}}>編輯</button>
+                <button className="kebab-menu-item danger" onClick={()=>{setDeleteLogIdx(i);setLogMenuIdx(null);}}>刪除</button>
+              </div>
+            </>
           )}
         </div>
       ))}
+
+      {editLogEntry&&(
+        <EditLogModal case_={c} log={editLogEntry.log} methods={methods}
+          onClose={()=>setEditLogEntry(null)}
+          onSave={(newLog)=>{
+            updateCase(c.id,prev=>({
+              logs:prev.logs.map((l,j)=>j===editLogEntry.idx?newLog:l)
+            }));
+            setEditLogEntry(null); showToast("已更新");
+          }}/>
+      )}
+
+      {deleteLogIdx!==null&&(
+        <div className="overlay center" onClick={()=>setDeleteLogIdx(null)}>
+          <div className="sheet center" onClick={e=>e.stopPropagation()}>
+            <div className="sheet-title">確認刪除？</div>
+            <div className="sheet-sub" style={{marginBottom:16}}>此筆聯絡紀錄刪除後無法復原。</div>
+            <div className="btn-row">
+              <button className="act-btn" onClick={()=>setDeleteLogIdx(null)}>取消</button>
+              <button className="act-btn danger" onClick={()=>{
+                updateCase(c.id,prev=>({logs:prev.logs.filter((_,j)=>j!==deleteLogIdx)}));
+                setDeleteLogIdx(null); showToast("已刪除");
+              }}>確認刪除</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {logModal&&<LogModal case_={c} methods={methods} onClose={()=>setLogModal(false)} onSave={handleLogSave}/>}
       {visitModal&&<VisitModal case_={c} methods={methods}
@@ -1290,9 +1354,6 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast 
           setBookingsModal(false);
           setEditVisitPlan({...plan, nextDue:booking.date, visitTime:booking.time, visitNote:booking.note});
         }}/>}
-      {editModal&&<EditCaseModal case_={c} methods={methods} levels={levels}
-        onClose={()=>setEditModal(false)} onSave={handleEditSave}
-        onDelete={(id)=>{updateCase(id,()=>null);onBack();}}/>}
     </div>
   );
 }
@@ -1326,7 +1387,7 @@ function BookingsModal({ case_:c, onClose, onAddNew, onEditBooking }){
                 onClick={()=>onEditBooking(b.plan,b)}>
                 <div>
                   <div style={{fontSize:13,fontWeight:500}}>{b.plan.method}</div>
-                  <div style={{fontSize:11,color:"var(--muted)"}}>{b.plan.method}{b.note?` · ${b.note}`:""}</div>
+                  <div style={{fontSize:11,color:"var(--muted)"}}>{b.note?b.note:FREQ_OPTIONS.find(f=>f.key===b.plan.freq)?.label}</div>
                 </div>
                 <div style={{fontSize:13,fontWeight:600,color:"var(--accent)",flexShrink:0}}>
                   {b.date.slice(5).replace("-","/")}{b.time?` ${b.time}`:""}
@@ -1827,7 +1888,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.41</span>
+          <span className="s-val">v15.42</span>
         </div>
       </div>
     </div>
@@ -1861,8 +1922,8 @@ export default function App(){
   }
   const [tab,     setTab]     = useState("home");
   const [detailId,setDetailId]= useState(null);
+  const [editCaseId, setEditCaseId] = useState(null);
   const [toast,   setToast]   = useState(null);
-  const [addOpen, setAddOpen] = useState(false);
   const toastTimer = useRef(null);
 
   useEffect(()=>{ lsSet(LS.cases,   cases);   },[cases]);
@@ -1894,8 +1955,11 @@ export default function App(){
   function showToast(msg){ setToast(msg); clearTimeout(toastTimer.current); toastTimer.current=setTimeout(()=>setToast(null),1900); }
   function openCase(id){ setDetailId(id); setTab("detail"); }
   function closeDetail(){ setDetailId(null); setTab("cases"); }
+  function openEditCase(id){ setEditCaseId(id); setTab("editCase"); }
+  function closeEditCase(){ setEditCaseId(null); setTab("detail"); }
 
   const detailCase=cases.find(c=>c.id===detailId)??null;
+  const editCase_=cases.find(c=>c.id===editCaseId)??null;
   const NAV=[{key:"home",icon:"◦",label:"今日"},{key:"cases",icon:"≡",label:"個案"},{key:"calendar",icon:"□",label:"行事曆"},{key:"settings",icon:"⊙",label:"設定"}];
 
   return (
@@ -1904,17 +1968,20 @@ export default function App(){
       <div className="shell" data-theme={theme}>
         <div className="screen">
           {tab==="home"     &&<HomeScreen     cases={cases} methods={methods} levels={levels} updateCase={updateCase} showToast={showToast} theme={theme} setTheme={setTheme}/>}
-          {tab==="cases"    &&<CasesScreen    cases={cases} methods={methods} levels={levels} onAdd={()=>setAddOpen(true)} onOpen={openCase} updateCase={updateCase} deleteCase={deleteCase} showToast={showToast}/>}
-          {tab==="detail"   &&detailCase&&<DetailScreen case_={detailCase} methods={methods} levels={levels} onBack={closeDetail} updateCase={updateCase} showToast={showToast}/>}
+          {tab==="cases"    &&<CasesScreen    cases={cases} methods={methods} levels={levels} onAdd={()=>setTab("addCase")} onOpen={openCase} updateCase={updateCase} deleteCase={deleteCase} showToast={showToast}/>}
+          {tab==="detail"   &&detailCase&&<DetailScreen case_={detailCase} methods={methods} levels={levels} onBack={closeDetail} updateCase={updateCase} showToast={showToast} onEditCase={openEditCase}/>}
+          {tab==="editCase" &&editCase_&&<EditCasePage case_={editCase_} methods={methods} levels={levels} onBack={closeEditCase}
+            onSave={(id,patch)=>{updateCase(id,()=>patch);showToast("已更新");}}
+            onDelete={(id)=>{updateCase(id,()=>null);setDetailId(null);setEditCaseId(null);setTab("cases");}}/>}
+          {tab==="addCase"  &&<AddCasePage existingCases={cases} levels={levels} methods={methods} onBack={()=>setTab("cases")} onSave={nc=>{addCase(nc);setTab("cases");}}/>}
           {tab==="calendar" &&<CalendarScreen cases={cases} onOpen={openCase}/>}
           {tab==="settings" &&<SettingsScreen cases={cases} methods={methods} setMethods={setMethods} levels={levels} setLevels={setLevels} updateCase={updateCase} showToast={showToast} theme={theme} setTheme={setTheme} weekStartDow={weekStartDow} setWeekStartDow={setWeekStartDow}/>}
         </div>
-        {addOpen&&<AddCaseModal existingCases={cases} levels={levels} methods={methods} onClose={()=>setAddOpen(false)} onSave={nc=>{addCase(nc);setAddOpen(false);}}/>}
         {toast&&<Toast msg={toast}/>}
         <div className="bnav">
           {NAV.map(n=>(
-            <button key={n.key} className={`bnav-btn ${(tab===n.key||(tab==="detail"&&n.key==="cases"))?"active":""}`}
-              onClick={()=>{setTab(n.key);setDetailId(null);}}>
+            <button key={n.key} className={`bnav-btn ${(tab===n.key||((tab==="detail"||tab==="editCase"||tab==="addCase")&&n.key==="cases"))?"active":""}`}
+              onClick={()=>{setTab(n.key);setDetailId(null);setEditCaseId(null);}}>
               <span className="bnav-icon">{n.icon}</span>
               <span className="bnav-label">{n.label}</span>
             </button>
