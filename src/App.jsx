@@ -38,6 +38,8 @@ html,body{height:100%;background:var(--bg);font-family:var(--sans);font-size:14p
 .bnav-label{font-size:10px;letter-spacing:.04em;color:var(--muted);font-weight:500}
 .bnav-btn.active .bnav-icon{opacity:1}
 .bnav-btn.active .bnav-label{color:var(--accent);font-weight:600}
+.fab{position:absolute;right:22px;bottom:calc(70px + env(safe-area-inset-bottom,0px));width:56px;height:56px;border-radius:50%;background:var(--accent);color:#fff;font-size:26px;font-weight:400;display:flex;align-items:center;justify-content:center;border:none;cursor:pointer;box-shadow:0 4px 14px rgba(18,16,12,.24);z-index:30;line-height:1;font-family:var(--sans)}
+.fab:active{opacity:.85}
 .ph{padding:calc(env(safe-area-inset-top,0px) + 20px) 22px 18px;display:flex;align-items:flex-end;justify-content:space-between;background:var(--bg)}
 .ph-eyebrow{font-family:var(--serif);font-size:11px;font-weight:300;letter-spacing:.08em;color:var(--muted);margin-bottom:2px}
 .ph-title{font-family:var(--serif);font-size:22px;font-weight:400;letter-spacing:-.01em;color:var(--text);line-height:1.2}
@@ -130,7 +132,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--sans);font-size:14p
 /* Settings */
 .settings-group{margin:0 16px 4px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
 .settings-row{display:flex;align-items:center;justify-content:space-between;padding:15px 18px;border-bottom:1px solid var(--border);min-height:54px;cursor:pointer;transition:background .1s}
-.archive-entry{display:flex;align-items:center;justify-content:space-between;margin:10px 22px 14px;padding:14px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);cursor:pointer;transition:opacity .12s;flex-shrink:0}
+.archive-entry{display:flex;align-items:center;justify-content:space-between;margin:10px 90px 14px 22px;padding:14px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);cursor:pointer;transition:opacity .12s;flex-shrink:0}
 .archive-entry:active{opacity:.7}
 .settings-row:last-child{border-bottom:none}
 .settings-row:active{background:var(--surface2)}
@@ -589,9 +591,12 @@ function TrackingPlanEditor({ plans, setPlans, methods }){
 // LOG MODAL — with plan association
 // ─────────────────────────────────────────────────────────────────────────────
 
-function LogModal({ case_:c, methods, onClose, onSave }){
+function LogModal({ case_:lockedCase, allCases, methods, onClose, onSave }){
+  const options = (allCases&&allCases.length>0) ? allCases : (lockedCase?[lockedCase]:[]);
+  const [caseId, setCaseId] = useState(lockedCase?.id || "");
+  const c = options.find(cc=>cc.id===caseId) || null;
   const safe = methods.length>0?methods:["電話"];
-  const plans = c.trackingPlans||[];
+  const plans = c?.trackingPlans||[];
   const nowH = new Date();
   const defaultTime = `${String(nowH.getHours()).padStart(2,"0")}:${String(nowH.getMinutes()).padStart(2,"0")}`;
   // 初始值一致：若有追蹤任務，預設聯絡方式對應第一個任務的方式
@@ -600,7 +605,15 @@ function LogModal({ case_:c, methods, onClose, onSave }){
   const [date,   setDate]   = useState(TODAY);
   const [time,   setTime]   = useState(defaultTime);
   const [note,   setNote]   = useState("");
+  const [err,    setErr]    = useState("");
 
+  function onCaseChange(id){
+    setCaseId(id); setErr("");
+    const nc = options.find(cc=>cc.id===id);
+    const np = nc?.trackingPlans||[];
+    setMethod(np[0]?.method || safe[0]);
+    setPlanId(np[0]?.id||null);
+  }
   function onMethodChange(m){
     setMethod(m);
     // 切換聯絡方式時，自動對應到同方式的追蹤任務；若無對應任務則取消關聯
@@ -612,12 +625,23 @@ function LogModal({ case_:c, methods, onClose, onSave }){
     // 選追蹤任務時，自動同步聯絡方式
     if(p) setMethod(p.method);
   }
+  function save(){
+    if(!c){ setErr("請選擇個案"); return; }
+    onSave(c.id,method,note.trim(),planId,date,time);
+    onClose();
+  }
 
   return (
     <div className="overlay center" onClick={onClose}>
       <div className="sheet center" onClick={e=>e.stopPropagation()}>
         <div className="sheet-title">記錄聯絡</div>
-        <div className="sheet-sub" style={{marginBottom:16}}>{c.nick}</div>
+
+        <label className="inp-label">個案</label>
+        <select className="inp" value={caseId} onChange={e=>onCaseChange(e.target.value)}>
+          {!lockedCase&&<option value="">請選擇個案</option>}
+          {options.map(cc=><option key={cc.id} value={cc.id}>{cc.nick}</option>)}
+        </select>
+        {err&&<div className="inp-err">{err}</div>}
 
         <label className="inp-label">日期與時間</label>
         <div style={{display:"flex",gap:8,marginBottom:14}}>
@@ -660,7 +684,7 @@ function LogModal({ case_:c, methods, onClose, onSave }){
         <input className="inp" placeholder="一兩句即可…" value={note} onChange={e=>setNote(e.target.value)} maxLength={120}/>
         <div className="btn-row">
           <button className="act-btn" onClick={onClose}>取消</button>
-          <button className="act-btn primary" onClick={()=>{onSave(c.id,method,note.trim(),planId,date,time);onClose();}}>儲存</button>
+          <button className="act-btn primary" onClick={save}>儲存</button>
         </div>
       </div>
     </div>
@@ -774,9 +798,6 @@ function AddCasePage({ existingCases, levels, methods, onBack, onSave }){
         <input className="inp" placeholder="例：阿明" value={nick} onChange={e=>{setNick(e.target.value);setErr("");}} maxLength={20} autoFocus/>
         {err&&<div className="inp-err">{err}</div>}
 
-        <label className="inp-label">備註（選填）</label>
-        <input className="inp" placeholder="簡短備忘…" value={note} onChange={e=>setNote(e.target.value)} maxLength={60}/>
-
         <label className="inp-label">關懷等級</label>
         <div className="opt-row">
           {Object.entries(levels).map(([k,l])=>{
@@ -788,6 +809,9 @@ function AddCasePage({ existingCases, levels, methods, onBack, onSave }){
         </div>
 
         <TrackingPlanEditor plans={plans} setPlans={setPlans} methods={safe}/>
+
+        <label className="inp-label">備註（選填）</label>
+        <input className="inp" placeholder="簡短備忘…" value={note} onChange={e=>setNote(e.target.value)} maxLength={60}/>
 
         <div className="btn-row">
           <button className="act-btn" onClick={onBack}>取消</button>
@@ -803,7 +827,8 @@ function AddCasePage({ existingCases, levels, methods, onBack, onSave }){
 // ─────────────────────────────────────────────────────────────────────────────
 
 function HomeScreen({ cases, methods, levels, updateCase, showToast }){
-  const [logModal,  setLogModal]  = useState(null);
+  const [logModal,     setLogModal]     = useState(null);
+  const [globalLogOpen, setGlobalLogOpen] = useState(false);
 
   const active = cases.filter(c=>!c.archived);
   // Show cases with due/overdue plans, or legacy cases without plans
@@ -893,7 +918,9 @@ function HomeScreen({ cases, methods, levels, updateCase, showToast }){
           </div>
         );
       })}
-      {logModal&&<LogModal case_={logModal} methods={methods} onClose={()=>setLogModal(null)} onSave={handleLogSave}/>}
+      {logModal&&<LogModal case_={logModal} allCases={active} methods={methods} onClose={()=>setLogModal(null)} onSave={handleLogSave}/>}
+      {globalLogOpen&&<LogModal case_={null} allCases={active} methods={methods} onClose={()=>setGlobalLogOpen(false)} onSave={handleLogSave}/>}
+      <button className="fab" onClick={()=>setGlobalLogOpen(true)} aria-label="新增聯絡紀錄">＋</button>
     </div>
   );
 }
@@ -927,7 +954,6 @@ function CasesScreen({ cases, methods, levels, onAdd, onOpen, updateCase, delete
     <div className="tab-shell">
       <div className="ph">
         <div><div className="ph-eyebrow">追蹤中的個案</div><div className="ph-title">個案列表</div></div>
-        <button className="ph-action" onClick={onAdd}>＋ 新增</button>
       </div>
       <div className="filter-row">
         <div className={`filter-chip ${levelFilters.size===0?"active":""}`}
@@ -944,7 +970,7 @@ function CasesScreen({ cases, methods, levels, onAdd, onOpen, updateCase, delete
         })}
       </div>
       <div className="screen-pad tab-scroll">
-      {filtered.length===0&&<div className="empty">{levelFilters.size>0?`沒有${[...levelFilters].map(k=>levels[k]?.label).join("、")}的個案`:"目前沒有聯絡中的個案"}<br/>{levelFilters.size>0?"":"點右上角新增"}</div>}
+      {filtered.length===0&&<div className="empty">{levelFilters.size>0?`沒有${[...levelFilters].map(k=>levels[k]?.label).join("、")}的個案`:"目前沒有聯絡中的個案"}<br/>{levelFilters.size>0?"":"點右下角新增"}</div>}
       {sorted.map(c=>{
         const st=getCaseStatus(c);
         const isSwiped=swipedId===c.id, isDelConf=delConfId===c.id;
@@ -1038,6 +1064,7 @@ function CasesScreen({ cases, methods, levels, onAdd, onOpen, updateCase, delete
         </div>
         <span style={{color:"var(--muted)",fontSize:16}}>›</span>
       </div>
+      <button className="fab" onClick={onAdd} aria-label="新增個案">＋</button>
     </div>
   );
 }
@@ -1905,10 +1932,10 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
       <div className="settings-group">
         <div className="settings-row static">
           <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
+            <img src={LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.46</span>
+          <span className="s-val">v15.47</span>
         </div>
       </div>
     </div>
