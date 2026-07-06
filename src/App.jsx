@@ -146,22 +146,22 @@ html,body{height:100%;background:var(--bg);font-family:var(--sans);font-size:14p
 .sheet-handle{width:36px;height:4px;border-radius:2px;background:var(--border);margin:0 auto 20px}
 .sheet-title{font-family:var(--serif);font-size:18px;font-weight:400;margin-bottom:4px}
 .sheet-sub{font-size:12px;color:var(--muted);margin-bottom:20px;line-height:1.5}
-.inp{width:100%;border:1px solid var(--border);border-radius:10px;padding:11px 14px;font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);margin-bottom:14px;outline:none;transition:border-color .15s;-webkit-appearance:none;height:44px}
-.inp:focus{border-color:var(--accent)}
+.inp{width:100%;border:1px solid var(--border2);border-radius:10px;padding:11px 14px;font-size:14px;font-family:var(--sans);color:var(--text);background:var(--surface);margin-bottom:14px;outline:none;transition:border-color .15s,box-shadow .15s;-webkit-appearance:none;height:44px;box-shadow:0 1px 2px rgba(18,16,12,.04)}
+.inp:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-lt)}
 select.inp{cursor:pointer;appearance:auto;height:44px}
 .inp-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:5px;display:block}
 .inp-hint{font-size:11px;color:var(--muted);margin-top:-10px;margin-bottom:14px}
 .inp-err{font-size:11px;color:var(--red);margin-top:-10px;margin-bottom:14px;font-weight:500}
 .opt-row{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
-.opt{flex:1;min-width:52px;height:40px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:10px;font-size:12px;font-weight:500;font-family:var(--sans);background:var(--bg);color:var(--muted);cursor:pointer;transition:all .12s}
-.opt.active{border-color:var(--accent);background:var(--accent-lt);color:var(--accent)}
+.opt{flex:1;min-width:52px;height:40px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border2);border-radius:10px;font-size:12px;font-weight:500;font-family:var(--sans);background:var(--surface);color:var(--text2);cursor:pointer;transition:all .12s;box-shadow:0 1px 2px rgba(18,16,12,.04)}
+.opt.active{border-color:var(--accent);background:var(--accent-lt);color:var(--accent);box-shadow:none}
 .step-bar{display:flex;gap:4px;margin-bottom:18px}
 .step-seg{height:2px;flex:1;border-radius:1px;background:var(--border);transition:background .2s}
 .step-seg.done{background:var(--accent)}
 .btn-row{display:flex;gap:10px;margin-top:6px}
 .btn-row .act-btn{flex:1;height:46px;display:flex;align-items:center;justify-content:center;border-radius:10px;font-size:14px}
 /* Task editor */
-.task-item{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;margin-bottom:8px}
+.task-item{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--surface);border:1px solid var(--border2);border-radius:10px;margin-bottom:8px;box-shadow:0 1px 2px rgba(18,16,12,.04)}
 /* Swipe */
 .swipe-row{position:relative;overflow:hidden;margin:0 22px 12px;border-radius:var(--r)}
 .swipe-card{display:flex;align-items:center;gap:14px;padding:18px 18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);cursor:pointer;position:relative;z-index:1;transform:translateX(0);transition:transform .25s ease;user-select:none;-webkit-user-select:none}
@@ -492,9 +492,6 @@ function LevelBadge({levelKey,levels}){
 }
 
 function Toast({msg}){ return <div className="toast">{msg}</div>; }
-function StepBar({total,current}){
-  return <div className="step-bar">{Array.from({length:total}).map((_,i)=><div key={i} className={`step-seg ${i<=current?"done":""}`}/>)}</div>;
-}
 
 // Inline plan chips for card rows
 function PlanChips({c}){
@@ -554,7 +551,7 @@ function TrackingPlanEditor({ plans, setPlans, methods }){
       ))}
 
       {adding&&(
-        <div style={{background:"var(--bg)",border:"1px solid var(--border)",borderRadius:10,padding:"12px 14px",marginTop:4}}>
+        <div style={{background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:10,padding:"12px 14px",marginTop:4}}>
           <label className="inp-label">聯絡方式</label>
           <select className="inp" value={form.method} onChange={e=>setForm(f=>({...f,method:e.target.value}))} autoFocus>
             {safe.map(m=><option key={m} value={m}>{m}</option>)}
@@ -737,7 +734,6 @@ function EditCasePage({ case_:c, methods, levels, onBack, onSave, onDelete }){
 
 function AddCasePage({ existingCases, levels, methods, onBack, onSave }){
   const safe = methods.length>0?methods:["電話"];
-  const [step,  setStep]  = useState(0);
   const [nick,  setNick]  = useState("");
   const [note,  setNote]  = useState("");
   const [level, setLevel] = useState(Object.keys(levels)[0]||"B");
@@ -755,8 +751,8 @@ function AddCasePage({ existingCases, levels, methods, onBack, onSave }){
     }catch{}
   }
 
-  function next(){ if(!nick.trim()){setErr("請輸入暱稱");return;} setErr(""); setStep(1); }
   function save(){
+    if(!nick.trim()){setErr("請輸入暱稱");return;}
     onSave({id:autoId,nick:nick.trim(),note:note.trim(),level,archived:false,archivedAt:null,
       lastContact:TODAY,trackingPlans:plans,logs:[]});
     onBack();
@@ -766,40 +762,36 @@ function AddCasePage({ existingCases, levels, methods, onBack, onSave }){
     <div className="screen-pad">
       <div className="ph">
         <div>
-          <button className="back-btn" onClick={()=>step===0?onBack():setStep(0)}>‹ 返回</button>
-          <div className="det-title">{step===0?"新增個案":"追蹤設定"}</div>
+          <button className="back-btn" onClick={onBack}>‹ 返回</button>
+          <div className="det-title">新增個案</div>
         </div>
       </div>
       <div style={{padding:"0 22px"}}>
-        <StepBar total={2} current={step}/>
-        <div className="sheet-sub">{step===0?`編號：${autoId}`:"選擇等級並設定追蹤計畫"}</div>
-        {step===0&&<>
-          <label className="inp-label">暱稱（不可使用真實姓名）</label>
-          <input className="inp" placeholder="例：阿明" value={nick} onChange={e=>{setNick(e.target.value);setErr("");}} maxLength={20} autoFocus/>
-          {err&&<div className="inp-err">{err}</div>}
-          <label className="inp-label">備註（選填）</label>
-          <input className="inp" placeholder="簡短備忘…" value={note} onChange={e=>setNote(e.target.value)} maxLength={60}/>
-          <div className="btn-row">
-            <button className="act-btn" onClick={onBack}>取消</button>
-            <button className="act-btn primary" onClick={next}>下一步</button>
-          </div>
-        </>}
-        {step===1&&<>
-          <label className="inp-label">關懷等級</label>
-          <div className="opt-row">
-            {Object.entries(levels).map(([k,l])=>{
-              const col=LEVEL_COLOR_OPTIONS.find(c=>c.key===l.colorKey)||LEVEL_COLOR_OPTIONS[1];
-              return <div key={k} className={`opt ${level===k?"active":""}`}
-                style={level===k?{background:col.bg,borderColor:col.color,color:col.color}:{}}
-                onClick={()=>applyDefaultPlans(k)}>{l.label}</div>;
-            })}
-          </div>
-          <TrackingPlanEditor plans={plans} setPlans={setPlans} methods={safe}/>
-          <div className="btn-row">
-            <button className="act-btn" onClick={()=>setStep(0)}>上一步</button>
-            <button className="act-btn primary" onClick={save}>建立個案</button>
-          </div>
-        </>}
+        <div className="sheet-sub">編號：{autoId}</div>
+
+        <label className="inp-label">暱稱（不可使用真實姓名）</label>
+        <input className="inp" placeholder="例：阿明" value={nick} onChange={e=>{setNick(e.target.value);setErr("");}} maxLength={20} autoFocus/>
+        {err&&<div className="inp-err">{err}</div>}
+
+        <label className="inp-label">備註（選填）</label>
+        <input className="inp" placeholder="簡短備忘…" value={note} onChange={e=>setNote(e.target.value)} maxLength={60}/>
+
+        <label className="inp-label">關懷等級</label>
+        <div className="opt-row">
+          {Object.entries(levels).map(([k,l])=>{
+            const col=LEVEL_COLOR_OPTIONS.find(c=>c.key===l.colorKey)||LEVEL_COLOR_OPTIONS[1];
+            return <div key={k} className={`opt ${level===k?"active":""}`}
+              style={level===k?{background:col.bg,borderColor:col.color,color:col.color}:{}}
+              onClick={()=>applyDefaultPlans(k)}>{l.label}</div>;
+          })}
+        </div>
+
+        <TrackingPlanEditor plans={plans} setPlans={setPlans} methods={safe}/>
+
+        <div className="btn-row">
+          <button className="act-btn" onClick={onBack}>取消</button>
+          <button className="act-btn primary" onClick={save}>建立個案</button>
+        </div>
       </div>
     </div>
   );
@@ -1888,7 +1880,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.42</span>
+          <span className="s-val">v15.43</span>
         </div>
       </div>
     </div>
