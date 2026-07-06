@@ -128,6 +128,8 @@ html,body{height:100%;background:var(--bg);font-family:var(--sans);font-size:14p
 /* Settings */
 .settings-group{margin:0 16px 4px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
 .settings-row{display:flex;align-items:center;justify-content:space-between;padding:15px 18px;border-bottom:1px solid var(--border);min-height:54px;cursor:pointer;transition:background .1s}
+.archive-entry{display:flex;align-items:center;justify-content:space-between;margin:8px 22px 0;padding:14px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);cursor:pointer;transition:opacity .12s}
+.archive-entry:active{opacity:.7}
 .settings-row:last-child{border-bottom:none}
 .settings-row:active{background:var(--surface2)}
 .settings-row.static{cursor:default}
@@ -899,13 +901,17 @@ function HomeScreen({ cases, methods, levels, updateCase, showToast }){
 // ─────────────────────────────────────────────────────────────────────────────
 
 function CasesScreen({ cases, methods, levels, onAdd, onOpen, updateCase, deleteCase, showToast }){
+  const [page,        setPage]        = useState("list"); // list | archived
   const [swipedId,    setSwipedId]    = useState(null);
   const [delConfId,   setDelConfId]   = useState(null);
   const [levelFilter, setLevelFilter] = useState(null); // null = 全部
   const touchStartX = useRef(0);
   const active   = cases.filter(c=>!c.archived);
+  const archivedCount = cases.filter(c=>c.archived).length;
   const filtered = levelFilter ? active.filter(c=>c.level===levelFilter) : active;
   const sorted   = [...filtered].sort((a,b)=>order2(getCaseStatus(a))-order2(getCaseStatus(b)));
+
+  if(page==="archived") return <ArchivedPage cases={cases} updateCase={updateCase} deleteCase={deleteCase} onBack={()=>setPage("list")} showToast={showToast}/>;
 
   return (
     <div className="screen-pad">
@@ -1013,6 +1019,13 @@ function CasesScreen({ cases, methods, levels, onAdd, onOpen, updateCase, delete
           </div>
         );
       })}
+      <div className="archive-entry" onClick={()=>setPage("archived")}>
+        <div>
+          <div style={{fontSize:13,fontWeight:500,color:"var(--text2)"}}>封存的個案</div>
+          <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>{archivedCount} 個</div>
+        </div>
+        <span style={{color:"var(--muted)",fontSize:16}}>›</span>
+      </div>
     </div>
   );
 }
@@ -1755,12 +1768,13 @@ function ReminderPage({ onBack }){
   );
 }
 
-function ArchivedPage({ cases, updateCase, onBack, showToast }){
-  const [uid,setUid]=useState(null);
+function ArchivedPage({ cases, updateCase, deleteCase, onBack, showToast }){
+  const [restoreId, setRestoreId] = useState(null);
+  const [deleteId,  setDeleteId]  = useState(null);
   const archived=[...cases].filter(c=>c.archived).sort((a,b)=>new Date(b.archivedAt||0)-new Date(a.archivedAt||0));
   return (
     <div className="screen-pad">
-      <div className="ph"><div><button className="back-btn" onClick={onBack}>‹ 設定</button><div className="ph-title">封存的個案</div></div></div>
+      <div className="ph"><div><button className="back-btn" onClick={onBack}>‹ 個案</button><div className="ph-title">封存的個案</div></div></div>
       {archived.length===0&&<div className="empty">目前沒有封存的個案</div>}
       {archived.map(c=>(
         <div key={c.id}>
@@ -1769,15 +1783,28 @@ function ArchivedPage({ cases, updateCase, onBack, showToast }){
               <div className="row-nick">{c.nick}</div>
               <div className="row-meta">最後聯絡：{c.lastContact?.slice(5)||"—"} · 封存：{c.archivedAt?new Date(c.archivedAt).toLocaleDateString("zh-TW"):"—"}</div>
             </div>
-            <button className="act-btn" style={{fontSize:12,padding:"5px 12px",flexShrink:0}} onClick={()=>setUid(uid===c.id?null:c.id)}>解除封存</button>
+            <div style={{display:"flex",gap:6,flexShrink:0}}>
+              <button className="act-btn" style={{fontSize:12,padding:"5px 12px"}} onClick={()=>{setDeleteId(null);setRestoreId(restoreId===c.id?null:c.id);}}>恢復</button>
+              <button className="act-btn danger" style={{fontSize:12,padding:"5px 12px"}} onClick={()=>{setRestoreId(null);setDeleteId(deleteId===c.id?null:c.id);}}>永久刪除</button>
+            </div>
           </div>
-          {uid===c.id&&(
+          {restoreId===c.id&&(
             <div style={{margin:"-8px 16px 10px",background:"var(--green-bg)",border:"1px solid #A8D8BC",borderRadius:"0 0 var(--r) var(--r)",padding:"12px 14px"}}>
-              <div style={{fontSize:13,fontWeight:500,marginBottom:4}}>解除封存「{c.nick}」？</div>
-              <div style={{fontSize:12,color:"var(--muted)",lineHeight:1.6,marginBottom:10}}>解除後將重新出現在個案管理，並恢復追蹤提醒。</div>
+              <div style={{fontSize:13,fontWeight:500,marginBottom:4}}>恢復「{c.nick}」？</div>
+              <div style={{fontSize:12,color:"var(--muted)",lineHeight:1.6,marginBottom:10}}>恢復後將重新出現在個案管理，並恢復追蹤提醒。</div>
               <div style={{display:"flex",gap:6}}>
-                <button className="act-btn" style={{flex:1}} onClick={()=>setUid(null)}>取消</button>
-                <button className="act-btn primary" style={{flex:1}} onClick={()=>{updateCase(c.id,()=>({archived:false,archivedAt:null}));setUid(null);showToast(`已解除封存 ${c.nick}`);}}>解除封存</button>
+                <button className="act-btn" style={{flex:1}} onClick={()=>setRestoreId(null)}>取消</button>
+                <button className="act-btn primary" style={{flex:1}} onClick={()=>{updateCase(c.id,()=>({archived:false,archivedAt:null}));setRestoreId(null);showToast(`已恢復 ${c.nick}`);}}>確認恢復</button>
+              </div>
+            </div>
+          )}
+          {deleteId===c.id&&(
+            <div style={{margin:"-8px 16px 10px",background:"var(--red-bg)",border:"1px solid #EDCFCC",borderRadius:"0 0 var(--r) var(--r)",padding:"12px 14px"}}>
+              <div style={{fontSize:13,color:"var(--red)",fontWeight:500,marginBottom:4}}>永久刪除「{c.nick}」？</div>
+              <div style={{fontSize:12,color:"var(--muted)",lineHeight:1.6,marginBottom:10}}>此操作無法復原，所有聯絡紀錄與追蹤計畫將一併刪除。</div>
+              <div style={{display:"flex",gap:6}}>
+                <button className="act-btn" style={{flex:1}} onClick={()=>setDeleteId(null)}>取消</button>
+                <button className="act-btn danger" style={{flex:1}} onClick={()=>{deleteCase(c.id);setDeleteId(null);}}>確認永久刪除</button>
               </div>
             </div>
           )}
@@ -1823,18 +1850,10 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
   if(page==="methods")  return <MethodsPage  methods={methods} setMethods={setMethods} onBack={()=>setPage("hub")}/>;
   if(page==="levels")   return <LevelsPage   levels={levels}   setLevels={setLevels}   methods={methods} onBack={()=>setPage("hub")}/>;
   if(page==="reminder") return <ReminderPage onBack={()=>setPage("hub")}/>;
-  if(page==="archived") return <ArchivedPage cases={cases} updateCase={updateCase} onBack={()=>setPage("hub")} showToast={showToast}/>;
   if(page==="export")   return <ExportCenterPage cases={cases} levels={levels} methods={methods} onBack={()=>setPage("hub")} showToast={showToast}/>;
   return (
     <div className="screen-pad">
       <div className="ph"><div><div className="ph-eyebrow">ReCon｜再聯絡</div><div className="ph-title">設定</div></div></div>
-      <div className="sec-label">個案</div>
-      <div className="settings-group">
-        <div className="settings-row" onClick={()=>setPage("archived")}>
-          <div><div className="s-label">封存的個案</div><div className="s-sub">{cases.filter(c=>c.archived).length} 個</div></div>
-          <span className="s-arrow">›</span>
-        </div>
-      </div>
       <div className="sec-label">管理</div>
       <div className="settings-group">
         <div className="settings-row" onClick={()=>setPage("methods")}><div><div className="s-label">聯絡方式管理</div><div className="s-sub">{methods.length} 種方式</div></div><span className="s-arrow">›</span></div>
@@ -1877,7 +1896,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.44</span>
+          <span className="s-val">v15.45</span>
         </div>
       </div>
     </div>
