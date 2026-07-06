@@ -691,7 +691,6 @@ function EditCasePage({ case_:c, methods, levels, onBack, onSave, onDelete }){
         </div>
       </div>
       <div style={{padding:"0 22px"}}>
-        <div className="sheet-sub">{c.id}</div>
         <label className="inp-label">暱稱／代號</label>
         <input className="inp" value={nick} onChange={e=>{setNick(e.target.value);setErr("");}} maxLength={20} autoFocus/>
         {err&&<div className="inp-err">{err}</div>}
@@ -767,8 +766,6 @@ function AddCasePage({ existingCases, levels, methods, onBack, onSave }){
         </div>
       </div>
       <div style={{padding:"0 22px"}}>
-        <div className="sheet-sub">編號：{autoId}</div>
-
         <label className="inp-label">暱稱（不可使用真實姓名）</label>
         <input className="inp" placeholder="例：阿明" value={nick} onChange={e=>{setNick(e.target.value);setErr("");}} maxLength={20} autoFocus/>
         {err&&<div className="inp-err">{err}</div>}
@@ -1880,7 +1877,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.43</span>
+          <span className="s-val">v15.44</span>
         </div>
       </div>
     </div>
