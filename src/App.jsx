@@ -38,7 +38,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--sans);font-size:14p
 .bnav-label{font-size:10px;letter-spacing:.04em;color:var(--muted);font-weight:500}
 .bnav-btn.active .bnav-icon{opacity:1}
 .bnav-btn.active .bnav-label{color:var(--accent);font-weight:600}
-.fab{position:absolute;right:22px;bottom:calc(70px + env(safe-area-inset-bottom,0px));width:56px;height:56px;border-radius:50%;background:var(--accent);color:#fff;font-size:26px;font-weight:400;display:flex;align-items:center;justify-content:center;border:none;cursor:pointer;box-shadow:0 4px 14px rgba(18,16,12,.24);z-index:30;line-height:1;font-family:var(--sans)}
+.fab{position:absolute;right:22px;bottom:calc(96px + env(safe-area-inset-bottom,0px));width:56px;height:56px;border-radius:50%;background:var(--accent);color:#fff;font-size:26px;font-weight:400;display:flex;align-items:center;justify-content:center;border:none;cursor:pointer;box-shadow:0 4px 14px rgba(18,16,12,.24);z-index:30;line-height:1;font-family:var(--sans)}
 .fab:active{opacity:.85}
 .ph{padding:calc(env(safe-area-inset-top,0px) + 20px) 22px 18px;display:flex;align-items:flex-end;justify-content:space-between;background:var(--bg)}
 .ph-eyebrow{font-family:var(--serif);font-size:11px;font-weight:300;letter-spacing:.08em;color:var(--muted);margin-bottom:2px}
@@ -218,10 +218,6 @@ select.inp{cursor:pointer;appearance:auto;height:44px}
   overflow:hidden;
 }
 .level-circle.lc-long{font-size:10px;letter-spacing:-.02em;}
-.level-circle.lc-red{background:var(--red-bg);color:var(--red);border:1.5px solid #F5CECA}
-.level-circle.lc-yellow{background:var(--yellow-bg);color:var(--yellow);border:1.5px solid #EDD9A0}
-.level-circle.lc-green{background:var(--green-bg);color:var(--green);border:1.5px solid #A8D8BC}
-.level-circle.lc-faint{background:var(--surface2);color:var(--muted);border:1.5px solid var(--border)}
 .filter-row{display:flex;gap:8px;padding:0 16px 14px;overflow-x:auto;-webkit-overflow-scrolling:touch}
 .filter-row::-webkit-scrollbar{display:none}
 .filter-chip{flex-shrink:0;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:500;border:1px solid var(--border2);background:var(--surface);color:var(--text2);cursor:pointer;white-space:nowrap;transition:all .12s}
@@ -289,7 +285,29 @@ const LEVEL_COLOR_OPTIONS = [
   {key:"red",    label:"紅", bg:"#FDECEA", color:"#C0392B"},
   {key:"yellow", label:"黃", bg:"#FDF8EE", color:"#B8860B"},
   {key:"green",  label:"綠", bg:"#EDF5F1", color:"#2D6A4F"},
+  {key:"blue",   label:"藍", bg:"#EAF1FB", color:"#2C5DA8"},
+  {key:"purple", label:"紫", bg:"#F3ECFA", color:"#7C4DA8"},
+  {key:"gray",   label:"灰", bg:"#F0EEEA", color:"#6B6558"},
 ];
+const LEVEL_COLOR_HEX = {red:"#C0392B",yellow:"#B8860B",green:"#2D6A4F",blue:"#2C5DA8",purple:"#7C4DA8",gray:"#6B6558",faint:"#8A8578"};
+// 取得等級的顏色（優先使用自訂色 hex，否則回退到預設 colorKey 對應色，最後 fallback 灰色）
+function levelColorHex(l){ return l?.color || LEVEL_COLOR_HEX[l?.colorKey] || LEVEL_COLOR_HEX.faint; }
+function hexToRgba(hex, a){
+  const h = (hex||"#8A8578").replace("#","");
+  const n = h.length===3 ? h.split("").map(c=>c+c).join("") : h;
+  const v = parseInt(n,16) || 0x8A8578;
+  const r=(v>>16)&255, g=(v>>8)&255, b=v&255;
+  return `rgba(${r},${g},${b},${a})`;
+}
+// 依天數找出最接近的頻率選項（讓追蹤任務預設頻率能對齊等級設定的間隔天數）
+function freqKeyFromDays(days){
+  let best=FREQ_OPTIONS[0], bestDiff=Infinity;
+  for(const fo of FREQ_OPTIONS){
+    const diff=Math.abs(fo.days-Number(days||7));
+    if(diff<bestDiff){bestDiff=diff;best=fo;}
+  }
+  return best.key;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DATA MODEL
@@ -496,7 +514,8 @@ function StatusPill({status,label}){ return <span className={`spill ${status}`}>
 
 function LevelBadge({levelKey,levels}){
   const l=levels[levelKey]; if(!l) return null;
-  return <span className={`lvl-badge lvl-${l.colorKey||"faint"}`}>{l.label}</span>;
+  const hex=levelColorHex(l);
+  return <span className="lvl-badge" style={{background:hexToRgba(hex,.12),color:hex,border:`1px solid ${hexToRgba(hex,.35)}`}}>{l.label}</span>;
 }
 
 function Toast({msg}){ return <div className="toast">{msg}</div>; }
@@ -520,25 +539,30 @@ function PlanChips({c}){
 // TRACKING PLAN EDITOR
 // ─────────────────────────────────────────────────────────────────────────────
 
-function TrackingPlanEditor({ plans, setPlans, methods }){
+function TrackingPlanEditor({ plans, setPlans, methods, defaultFreq }){
   const safe = methods.length>0?methods:["電話"];
+  const initFreq = defaultFreq || "monthly";
   const [adding, setAdding] = useState(false);
-  const [form, setForm]     = useState({method:safe[0],freq:"monthly",anchorDay:null,anchorDow:null,timesPerPeriod:1});
+  const [form, setForm]     = useState({method:safe[0],freq:initFreq,anchorDay:null,anchorDow:null,timesPerPeriod:1});
 
   function add(){
     if(!form.method) return;
     const nextDue = calcPlanNextDue({...form}, TODAY);
     setPlans(prev=>[...prev,{...form, id:genPlanId(), nextDue}]);
     setAdding(false);
-    setForm({method:safe[0],freq:"monthly",anchorDay:null,anchorDow:null,timesPerPeriod:1});
+    setForm({method:safe[0],freq:defaultFreq||"monthly",anchorDay:null,anchorDow:null,timesPerPeriod:1});
   }
   function remove(id){ setPlans(prev=>prev.filter(p=>p.id!==id)); }
+  function openAdd(){
+    setForm(f=>({...f,freq:defaultFreq||f.freq}));
+    setAdding(v=>!v);
+  }
 
   return (
     <div style={{marginBottom:14}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
         <label className="inp-label" style={{margin:0}}>追蹤計畫</label>
-        <button className="act-btn" style={{fontSize:11,padding:"3px 10px"}} onClick={()=>setAdding(v=>!v)}>
+        <button className="act-btn" style={{fontSize:11,padding:"3px 10px"}} onClick={openAdd}>
           {adding?"取消":"＋ 新增任務"}
         </button>
       </div>
@@ -727,15 +751,15 @@ function EditCasePage({ case_:c, methods, levels, onBack, onSave, onDelete }){
         <label className="inp-label">關懷等級</label>
         <div className="opt-row">
           {Object.entries(levels).map(([k,l])=>{
-            const col=LEVEL_COLOR_OPTIONS.find(c=>c.key===l.colorKey)||LEVEL_COLOR_OPTIONS[1];
+            const hex=levelColorHex(l);
             return <div key={k} className={`opt ${level===k?"active":""}`}
-              style={level===k?{background:col.bg,borderColor:col.color,color:col.color}:{}}
+              style={level===k?{background:hexToRgba(hex,.12),borderColor:hex,color:hex}:{}}
               onClick={()=>setLevel(k)}>{l.label}</div>;
           })}
         </div>
         <label className="inp-label">備註（選填）</label>
         <input className="inp" placeholder="簡短備忘…" value={note} onChange={e=>setNote(e.target.value)} maxLength={60}/>
-        <TrackingPlanEditor plans={trackingPlans} setPlans={setPlans} methods={safe}/>
+        <TrackingPlanEditor plans={trackingPlans} setPlans={setPlans} methods={safe} defaultFreq={freqKeyFromDays(levels[level]?.days)}/>
         {confirmDel?(
           <div style={{background:"var(--red-bg)",border:"1px solid #EDCFCC",borderRadius:10,padding:"12px 14px",marginBottom:14}}>
             <div style={{fontSize:13,color:"var(--red)",fontWeight:500,marginBottom:6}}>確認刪除「{c.nick}」？</div>
@@ -797,7 +821,18 @@ function AddCasePage({ existingCases, levels, methods, onBack, onSave }){
       </div>
       <div style={{padding:"0 22px"}}>
         <label className="inp-label">暱稱（不可使用真實姓名）</label>
-        <input className="inp" placeholder="例：阿明" value={nick} onChange={e=>{setNick(e.target.value);setErr("");}} maxLength={20} autoFocus/>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+          <input className="inp" style={{flex:1,marginBottom:0}} placeholder="例：阿明" value={nick} onChange={e=>{setNick(e.target.value);setErr("");}} maxLength={20} autoFocus/>
+          {(()=>{
+            const lvl=levels[level]; const hex=levelColorHex(lvl); const lbl=lvl?.label||"?";
+            return (
+              <div className={`level-circle${lbl.length<=1?"":" lc-long"}`}
+                style={{flexShrink:0,background:hexToRgba(hex,.12),color:hex,border:`1.5px solid ${hexToRgba(hex,.35)}`}}>
+                {lbl}
+              </div>
+            );
+          })()}
+        </div>
         {err&&<div className="inp-err">{err}</div>}
 
         <label className="inp-label">關懷等級</label>
@@ -805,7 +840,7 @@ function AddCasePage({ existingCases, levels, methods, onBack, onSave }){
           {Object.entries(levels).map(([k,l])=><option key={k} value={k}>{l.label}</option>)}
         </select>
 
-        <TrackingPlanEditor plans={plans} setPlans={setPlans} methods={safe}/>
+        <TrackingPlanEditor plans={plans} setPlans={setPlans} methods={safe} defaultFreq={freqKeyFromDays(levels[level]?.days)}/>
 
         <label className="inp-label">備註（選填）</label>
         <input className="inp" placeholder="簡短備忘…" value={note} onChange={e=>setNote(e.target.value)} maxLength={60}/>
@@ -988,10 +1023,13 @@ function CasesScreen({ cases, methods, levels, onAdd, onOpen, updateCase, delete
               onTouchEnd={e=>{const dx=touchStartX.current-e.changedTouches[0].clientX;if(dx>40)setSwipedId(c.id);else if(dx<-20)setSwipedId(null);}}>
               {/* 左側：等級圓圈 — 顯示完整等級名稱（1個字維持原大小，2字以上縮小字級） */}
               {(()=>{
-                const label = levels[c.level]?.label || c.level;
+                const lvl = levels[c.level];
+                const label = lvl?.label || c.level;
                 const isShort = label.length<=1;
+                const hex = levelColorHex(lvl);
                 return (
-                  <div className={`level-circle lc-${levels[c.level]?.colorKey||"faint"}${isShort?"":" lc-long"}`}>
+                  <div className={`level-circle${isShort?"":" lc-long"}`}
+                    style={{background:hexToRgba(hex,.12),color:hex,border:`1.5px solid ${hexToRgba(hex,.35)}`}}>
                     {label}
                   </div>
                 );
@@ -1638,26 +1676,25 @@ function LevelsPage({ levels, setLevels, methods, onBack }){
   const [editKey,setEditKey]=useState(null); const [form,setForm]=useState({}); const [planEdit,setPlanEdit]=useState([]); const [editErr,setEditErr]=useState("");
   const [swipedKey,setSwipedKey]=useState(null); const touchStartX=useRef(0);
   const [adding,setAdding]=useState(false); const [newForm,setNewForm]=useState({key:"",label:"",days:14,desc:"",colorKey:"yellow"}); const [newPlans,setNewPlans]=useState([]); const [err,setErr]=useState("");
-  const colorOf=k=>LEVEL_COLOR_OPTIONS.find(c=>c.key===k)||LEVEL_COLOR_OPTIONS[1];
   function loadPlans(k){ try{const r=localStorage.getItem(LS_DPLANS);if(r){const d=JSON.parse(r);return d[k]||[];}}catch{}return[]; }
   function savePlans(k,t){ try{const r=localStorage.getItem(LS_DPLANS);const d=r?JSON.parse(r):{};d[k]=t;localStorage.setItem(LS_DPLANS,JSON.stringify(d));}catch{} }
-  function startEdit(k){setEditKey(k);setAdding(false);setEditErr("");setForm({label:levels[k].label,days:levels[k].days,desc:levels[k].desc||"",colorKey:levels[k].colorKey||"yellow"});setPlanEdit(loadPlans(k));}
+  function startEdit(k){setEditKey(k);setAdding(false);setEditErr("");setForm({label:levels[k].label,days:levels[k].days,desc:levels[k].desc||"",colorKey:levels[k].colorKey||"yellow",color:levelColorHex(levels[k])});setPlanEdit(loadPlans(k));}
   function saveEdit(){
     if(!form.label?.trim())return;
     if(planEdit.length===0){ setEditErr("每個等級至少需要一個追蹤任務"); return; }
     setEditErr("");
-    setLevels(prev=>({...prev,[editKey]:{...prev[editKey],label:form.label.trim(),days:Math.max(1,Number(form.days)||7),desc:(form.desc||"").trim(),colorKey:form.colorKey}}));
+    setLevels(prev=>({...prev,[editKey]:{...prev[editKey],label:form.label.trim(),days:Math.max(1,Number(form.days)||7),desc:(form.desc||"").trim(),colorKey:form.colorKey,color:form.color}}));
     savePlans(editKey,planEdit);
     setEditKey(null);
   }
   function delLevel(k){if(Object.keys(levels).length<=1)return;setLevels(prev=>{const n={...prev};delete n[k];return n;});setEditKey(null);}
-  function startAdd(){setAdding(true);setEditKey(null);setNewForm({label:"",days:14,desc:"",colorKey:"yellow"});setNewPlans([]);setErr("");}
+  function startAdd(){setAdding(true);setEditKey(null);setNewForm({label:"",days:14,desc:"",colorKey:"yellow",color:LEVEL_COLOR_HEX.yellow});setNewPlans([]);setErr("");}
   function saveAdd(){
     if(!newForm.label.trim()){setErr("請填寫名稱");return;}
     if(newPlans.length===0){setErr("每個等級至少需要一個追蹤任務");return;}
     // 內部識別碼自動產生，使用者不需要理解或填寫
     const k = `LV${Date.now()}`;
-    setLevels(prev=>({...prev,[k]:{label:newForm.label.trim(),days:Math.max(1,Number(newForm.days)||14),desc:(newForm.desc||"").trim(),colorKey:newForm.colorKey}}));
+    setLevels(prev=>({...prev,[k]:{label:newForm.label.trim(),days:Math.max(1,Number(newForm.days)||14),desc:(newForm.desc||"").trim(),colorKey:newForm.colorKey,color:newForm.color}}));
     savePlans(k,newPlans);
     setAdding(false);
     setErr("");
@@ -1667,7 +1704,7 @@ function LevelsPage({ levels, setLevels, methods, onBack }){
       <div className="ph"><div><button className="back-btn" onClick={onBack}>‹ 設定</button><div className="ph-title">關懷等級管理</div></div><button className="ph-action" onClick={startAdd}>＋</button></div>
 
       {Object.entries(levels).map(([k,l])=>{
-        const col=colorOf(l.colorKey||"yellow"); const plans=loadPlans(k);
+        const plans=loadPlans(k);
         const isShort = l.label.length<=1;
 
         if(editKey===k) return (
@@ -1684,11 +1721,17 @@ function LevelsPage({ levels, setLevels, methods, onBack }){
               </div>
             </div>
             <label className="inp-label">顏色</label>
-            <div className="opt-row" style={{marginBottom:12}}>
-              {LEVEL_COLOR_OPTIONS.map(c=><div key={c.key} className={`opt ${form.colorKey===c.key?"active":""}`} style={form.colorKey===c.key?{background:c.bg,borderColor:c.color,color:c.color}:{}} onClick={()=>setForm(x=>({...x,colorKey:c.key}))}>{c.label}</div>)}
+            <div className="opt-row" style={{marginBottom:8}}>
+              {LEVEL_COLOR_OPTIONS.map(c=><div key={c.key} className={`opt ${form.color===c.color?"active":""}`} style={form.color===c.color?{background:c.bg,borderColor:c.color,color:c.color}:{}} onClick={()=>setForm(x=>({...x,color:c.color,colorKey:c.key}))}>{c.label}</div>)}
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+              <input type="color" value={form.color||levelColorHex(form)}
+                onChange={e=>setForm(x=>({...x,color:e.target.value,colorKey:"custom"}))}
+                style={{width:44,height:36,border:"1px solid var(--border2)",borderRadius:8,padding:2,cursor:"pointer",background:"var(--surface)"}}/>
+              <span style={{fontSize:12,color:"var(--muted)"}}>自訂顏色</span>
             </div>
             <div style={{borderTop:"1px solid var(--border)",marginBottom:12,paddingTop:12}}>
-              <TrackingPlanEditor plans={planEdit} setPlans={setPlanEdit} methods={safe}/>
+              <TrackingPlanEditor plans={planEdit} setPlans={setPlanEdit} methods={safe} defaultFreq={freqKeyFromDays(form.days)}/>
             </div>
             {editErr&&<div className="inp-err">{editErr}</div>}
             <div style={{display:"flex",gap:6}}>
@@ -1720,7 +1763,8 @@ function LevelsPage({ levels, setLevels, methods, onBack }){
                 if(dx>40) setSwipedKey(k);
                 else if(dx<-20) setSwipedKey(null);
               }}>
-              <div className={`level-circle lc-${l.colorKey||"faint"}${isShort?"":" lc-long"}`}>
+              <div className={`level-circle${isShort?"":" lc-long"}`}
+                style={{background:hexToRgba(levelColorHex(l),.12),color:levelColorHex(l),border:`1.5px solid ${hexToRgba(levelColorHex(l),.35)}`}}>
                 {l.label}
               </div>
               <div className="row-main">
@@ -1737,8 +1781,8 @@ function LevelsPage({ levels, setLevels, methods, onBack }){
         <div className="card-row" style={{display:"block",cursor:"default"}}>
           <label className="inp-label">名稱（會顯示在個案列表的圓圈標籤裡，1-4 個字為佳）</label>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
-            <div className={`level-circle lc-${newForm.colorKey||"faint"}${newForm.label.length>1?" lc-long":""}`}
-              style={{flexShrink:0}}>
+            <div className={`level-circle${newForm.label.length>1?" lc-long":""}`}
+              style={{flexShrink:0,background:hexToRgba(levelColorHex(newForm),.12),color:levelColorHex(newForm),border:`1.5px solid ${hexToRgba(levelColorHex(newForm),.35)}`}}>
               {newForm.label||"？"}
             </div>
             <input className="inp" style={{flex:1,marginBottom:0}} placeholder="例：高風險 或 H"
@@ -1756,10 +1800,16 @@ function LevelsPage({ levels, setLevels, methods, onBack }){
           </div>
           <label className="inp-label">顏色</label>
           <div className="opt-row" style={{marginBottom:8}}>
-            {LEVEL_COLOR_OPTIONS.map(c=><div key={c.key} className={`opt ${newForm.colorKey===c.key?"active":""}`} style={newForm.colorKey===c.key?{background:c.bg,borderColor:c.color,color:c.color}:{}} onClick={()=>setNewForm(f=>({...f,colorKey:c.key}))}>{c.label}</div>)}
+            {LEVEL_COLOR_OPTIONS.map(c=><div key={c.key} className={`opt ${newForm.color===c.color?"active":""}`} style={newForm.color===c.color?{background:c.bg,borderColor:c.color,color:c.color}:{}} onClick={()=>setNewForm(f=>({...f,color:c.color,colorKey:c.key}))}>{c.label}</div>)}
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+            <input type="color" value={newForm.color||levelColorHex(newForm)}
+              onChange={e=>setNewForm(f=>({...f,color:e.target.value,colorKey:"custom"}))}
+              style={{width:44,height:36,border:"1px solid var(--border2)",borderRadius:8,padding:2,cursor:"pointer",background:"var(--surface)"}}/>
+            <span style={{fontSize:12,color:"var(--muted)"}}>自訂顏色</span>
           </div>
           <div style={{borderTop:"1px solid var(--border)",marginBottom:12,paddingTop:12}}>
-            <TrackingPlanEditor plans={newPlans} setPlans={setNewPlans} methods={safe}/>
+            <TrackingPlanEditor plans={newPlans} setPlans={setNewPlans} methods={safe} defaultFreq={freqKeyFromDays(newForm.days)}/>
           </div>
           {err&&<div className="inp-err">{err}</div>}
           <div style={{display:"flex",gap:6}}>
@@ -1934,7 +1984,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.48</span>
+          <span className="s-val">v15.49</span>
         </div>
       </div>
     </div>
