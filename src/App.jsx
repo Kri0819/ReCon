@@ -57,7 +57,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--sans);font-size:14p
 .lvl-green{background:var(--green-bg);color:var(--green);border:1px solid #A8D8BC}
 .lvl-faint{background:var(--surface2);color:var(--muted);border:1px solid var(--border)}
 /* Tracking progress */
-.plan-block{margin:0 16px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.plan-block{margin:0 22px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
 .plan-block-hd{padding:10px 14px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
 .plan-row{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:1px solid var(--border)}
 .plan-row:last-child{border-bottom:none}
@@ -117,8 +117,6 @@ html,body{height:100%;background:var(--bg);font-family:var(--sans);font-size:14p
 .cal-td.today-cell .cal-num{background:var(--accent);color:#fff;border-radius:50%;font-weight:700;font-size:11px}
 .cal-dots{display:flex;gap:2px;justify-content:center;overflow:hidden;flex-shrink:0}
 .cal-dot{width:4px;height:4px;border-radius:50%;flex-shrink:0}
-.cal-nav{display:flex;align-items:center;justify-content:space-between;padding:16px 22px 12px}
-.cal-month{font-family:var(--serif);font-size:17px;font-weight:400;letter-spacing:-.01em}
 .cal-arrow{width:32px;height:32px;border-radius:50%;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;color:var(--muted);font-family:var(--sans);transition:all .1s}
 .cal-arrow:active{background:var(--accent-lt);color:var(--accent)}
 .day-panel{margin:12px 18px 0;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
@@ -130,7 +128,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--sans);font-size:14p
 .day-nick{font-size:13px;font-weight:500;flex:1}
 .day-meth{font-size:11px;color:var(--muted);flex-shrink:0}
 /* Settings */
-.settings-group{margin:0 16px 4px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.settings-group{margin:0 22px 6px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
 .settings-row{display:flex;align-items:center;justify-content:space-between;padding:15px 18px;border-bottom:1px solid var(--border);min-height:54px;cursor:pointer;transition:background .1s}
 .archive-entry{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);cursor:pointer;transition:opacity .12s}
 .archive-entry:active{opacity:.7}
@@ -144,6 +142,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--sans);font-size:14p
 .s-sub{font-size:12px;color:var(--text2);margin-top:1px}
 .s-val{font-size:13px;color:var(--muted)}
 .s-arrow{font-size:16px;color:var(--faint)}
+.s-check{font-size:15px;color:var(--accent);font-weight:700}
 /* Modals */
 .overlay{position:absolute;inset:0;background:rgba(18,16,12,.48);display:flex;align-items:flex-end;z-index:100;animation:fi .15s;backdrop-filter:blur(3px)}
 .overlay.center{align-items:center;justify-content:center}
@@ -1326,7 +1325,7 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast,
         <span>聯絡紀錄</span>
         {c.logs&&c.logs.length>0&&<span style={{fontWeight:400,letterSpacing:0,textTransform:"none",fontSize:11}}>{c.logs.length} 筆</span>}
       </div>
-      {(!c.logs||c.logs.length===0)&&<div style={{margin:"0 16px 12px",padding:"12px 14px",background:"var(--surface2)",borderRadius:"var(--r)",fontSize:12,color:"var(--muted)"}}>尚無聯絡紀錄，點「記錄聯絡」開始記錄。</div>}
+      {(!c.logs||c.logs.length===0)&&<div style={{margin:"0 22px 12px",padding:"12px 14px",background:"var(--surface2)",borderRadius:"var(--r)",fontSize:12,color:"var(--muted)"}}>尚無聯絡紀錄，點「記錄聯絡」開始記錄。</div>}
       {(c.logs||[]).map((log,i)=>(
         <div key={i} style={{position:"relative"}}>
           <div className="log-item">
@@ -1575,10 +1574,12 @@ function CalendarScreen({ cases, onOpen }){
 
   return (
     <div className="screen-pad">
-      <div className="cal-nav">
-        <button className="cal-arrow" onClick={prev}>‹</button>
-        <div className="cal-month">{year}年 {MONTH_NAMES[month]}</div>
-        <button className="cal-arrow" onClick={next}>›</button>
+      <div className="ph">
+        <div><div className="ph-eyebrow">行事曆</div><div className="ph-title">{year}年 {MONTH_NAMES[month]}</div></div>
+        <div style={{display:"flex",gap:8}}>
+          <button className="cal-arrow" onClick={prev}>‹</button>
+          <button className="cal-arrow" onClick={next}>›</button>
+        </div>
       </div>
       <div className="cal-wrap" ref={wrapRef} style={{"--csz":"44px"}}>
         <div className="cal-head">{DOW_NAMES.map(d=><div key={d} className="cal-th">{d}</div>)}</div>
@@ -1841,7 +1842,7 @@ function ReminderPage({ onBack }){
           <button className="act-btn" style={{width:"100%",padding:"9px 0",textAlign:"center",fontSize:13}} onClick={()=>setAdding(!adding)}>{adding?"取消":"＋ 新增提醒時間"}</button>
         </div>
         {adding&&(
-          <div style={{padding:"12px 16px",background:"var(--bg)",borderTop:"1px solid var(--border)"}}>
+          <div style={{padding:"12px 16px",background:"var(--surface2)",borderTop:"1px solid var(--border)"}}>
             <div className="opt-row" style={{marginBottom:10}}>
               {PRESETS.filter(p=>!times.includes(p)).map(p=><div key={p} className="opt" style={{minWidth:60}} onClick={()=>addTime(p)}>{p}</div>)}
             </div>
@@ -1877,7 +1878,7 @@ function ArchivedPage({ cases, updateCase, deleteCase, onBack, showToast }){
             </div>
           </div>
           {restoreId===c.id&&(
-            <div style={{margin:"-8px 16px 10px",background:"var(--green-bg)",border:"1px solid #A8D8BC",borderRadius:"0 0 var(--r) var(--r)",padding:"12px 14px"}}>
+            <div style={{margin:"-8px 22px 10px",background:"var(--green-bg)",border:"1px solid #A8D8BC",borderRadius:"0 0 var(--r) var(--r)",padding:"12px 14px"}}>
               <div style={{fontSize:13,fontWeight:500,marginBottom:4}}>恢復「{c.nick}」？</div>
               <div style={{fontSize:12,color:"var(--muted)",lineHeight:1.6,marginBottom:10}}>恢復後將重新出現在個案管理，並恢復追蹤提醒。</div>
               <div style={{display:"flex",gap:6}}>
@@ -1887,7 +1888,7 @@ function ArchivedPage({ cases, updateCase, deleteCase, onBack, showToast }){
             </div>
           )}
           {deleteId===c.id&&(
-            <div style={{margin:"-8px 16px 10px",background:"var(--red-bg)",border:"1px solid #EDCFCC",borderRadius:"0 0 var(--r) var(--r)",padding:"12px 14px"}}>
+            <div style={{margin:"-8px 22px 10px",background:"var(--red-bg)",border:"1px solid #EDCFCC",borderRadius:"0 0 var(--r) var(--r)",padding:"12px 14px"}}>
               <div style={{fontSize:13,color:"var(--red)",fontWeight:500,marginBottom:4}}>永久刪除「{c.nick}」？</div>
               <div style={{fontSize:12,color:"var(--muted)",lineHeight:1.6,marginBottom:10}}>此操作無法復原，所有聯絡紀錄與追蹤計畫將一併刪除。</div>
               <div style={{display:"flex",gap:6}}>
@@ -1952,15 +1953,19 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
       <div className="settings-group">
         <div className="settings-row" onClick={()=>setPage("export")}><div className="s-label">資料匯出中心</div><span className="s-arrow">›</span></div>
       </div>
-      <div className="sec-label">顯示</div>
+      <div className="sec-label">外觀</div>
       <div className="settings-group">
-        <div className="settings-row static">
-          <div><div className="s-label">外觀模式</div><div className="s-sub">{theme==="dark"?"深色":"淺色"}</div></div>
-          <div style={{display:"flex",gap:8}}>
-            <button className={`act-btn ${theme!=="dark"?"primary":""}`} style={{padding:"5px 14px",fontSize:12}} onClick={()=>setTheme("light")}>淺色</button>
-            <button className={`act-btn ${theme==="dark"?"primary":""}`} style={{padding:"5px 14px",fontSize:12}} onClick={()=>setTheme("dark")}>深色</button>
-          </div>
+        <div className="settings-row" onClick={()=>setTheme("light")}>
+          <div className="s-label">淺色模式</div>
+          {theme!=="dark"&&<span className="s-check">✓</span>}
         </div>
+        <div className="settings-row" onClick={()=>setTheme("dark")}>
+          <div className="s-label">深色模式</div>
+          {theme==="dark"&&<span className="s-check">✓</span>}
+        </div>
+      </div>
+      <div className="sec-label">偏好設定</div>
+      <div className="settings-group">
         <div className="settings-row static" style={{flexDirection:"column",alignItems:"stretch",gap:10}}>
           <div>
             <div className="s-label">週期起始日</div>
@@ -1984,7 +1989,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.49</span>
+          <span className="s-val">v15.50</span>
         </div>
       </div>
     </div>
