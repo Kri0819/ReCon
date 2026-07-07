@@ -4,7 +4,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 export default defineConfig({
   plugins: [react(), VitePWA({
     registerType:'autoUpdate',
-    includeAssets:['favicon-32.png','favicon-16.png','apple-touch-icon.png'],
+    includeAssets:['favicon-32.png','favicon-16.png','favicon-32-dark.png','favicon-16-dark.png','apple-touch-icon.png'],
     manifest:{
       name:'ReCon｜再聯絡',short_name:'再聯絡',
       description:'個案聯絡與訪視提醒工具',

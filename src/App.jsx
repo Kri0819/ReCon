@@ -132,8 +132,10 @@ html,body{height:100%;background:var(--bg);font-family:var(--sans);font-size:14p
 /* Settings */
 .settings-group{margin:0 16px 4px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
 .settings-row{display:flex;align-items:center;justify-content:space-between;padding:15px 18px;border-bottom:1px solid var(--border);min-height:54px;cursor:pointer;transition:background .1s}
-.archive-entry{display:flex;align-items:center;justify-content:space-between;margin:10px 90px 14px 22px;padding:14px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);cursor:pointer;transition:opacity .12s;flex-shrink:0}
+.archive-entry{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);cursor:pointer;transition:opacity .12s}
 .archive-entry:active{opacity:.7}
+.fab-inline{width:56px;height:56px;border-radius:50%;background:var(--accent);color:#fff;font-size:26px;display:flex;align-items:center;justify-content:center;border:none;cursor:pointer;box-shadow:0 4px 14px rgba(18,16,12,.24);flex-shrink:0;font-family:var(--sans);line-height:1}
+.fab-inline:active{opacity:.85}
 .settings-row:last-child{border-bottom:none}
 .settings-row:active{background:var(--surface2)}
 .settings-row.static{cursor:default}
@@ -463,8 +465,8 @@ function makeInitialCases(){
     { id:"C001", nick:"阿明", level:"A", note:"情緒起伏大，需定期關心",
       archived:false, archivedAt:null, lastContact:ds(-14),
       trackingPlans:[
-        {id:"tp1",method:"電話",freq:"monthly",anchorDay:null,anchorDow:null,timesPerPeriod:1,nextDue:TODAY},
-        {id:"tp2",method:"訪視",freq:"monthly",anchorDay:null,anchorDow:null,timesPerPeriod:1,nextDue:ds(5)},
+        {id:"tp1",method:"電話",freq:"weekly",anchorDay:null,anchorDow:null,timesPerPeriod:1,nextDue:TODAY},
+        {id:"tp2",method:"訪視",freq:"weekly",anchorDay:null,anchorDow:null,timesPerPeriod:1,nextDue:ds(5)},
       ],
       logs:[{date:ds(-14),method:"電話",note:"情況穩定，已確認回診",planId:"tp1"},{date:ds(-21),method:"電話",note:"略顯低落，持續追蹤",planId:"tp1"}] },
     { id:"C002", nick:"小芬", level:"E", note:"近期壓力大",
@@ -799,14 +801,9 @@ function AddCasePage({ existingCases, levels, methods, onBack, onSave }){
         {err&&<div className="inp-err">{err}</div>}
 
         <label className="inp-label">關懷等級</label>
-        <div className="opt-row">
-          {Object.entries(levels).map(([k,l])=>{
-            const col=LEVEL_COLOR_OPTIONS.find(c=>c.key===l.colorKey)||LEVEL_COLOR_OPTIONS[1];
-            return <div key={k} className={`opt ${level===k?"active":""}`}
-              style={level===k?{background:col.bg,borderColor:col.color,color:col.color}:{}}
-              onClick={()=>applyDefaultPlans(k)}>{l.label}</div>;
-          })}
-        </div>
+        <select className="inp" value={level} onChange={e=>applyDefaultPlans(e.target.value)}>
+          {Object.entries(levels).map(([k,l])=><option key={k} value={k}>{l.label}</option>)}
+        </select>
 
         <TrackingPlanEditor plans={plans} setPlans={setPlans} methods={safe}/>
 
@@ -1057,14 +1054,16 @@ function CasesScreen({ cases, methods, levels, onAdd, onOpen, updateCase, delete
         );
       })}
       </div>
-      <div className="archive-entry" onClick={()=>setPage("archived")}>
-        <div>
-          <div style={{fontSize:13,fontWeight:500,color:"var(--text2)"}}>封存的個案</div>
-          <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>{archivedCount} 個</div>
+      <div style={{display:"flex",alignItems:"center",gap:10,margin:"10px 22px 14px",flexShrink:0}}>
+        <div className="archive-entry" style={{flex:1,margin:0}} onClick={()=>setPage("archived")}>
+          <div>
+            <div style={{fontSize:13,fontWeight:500,color:"var(--text2)"}}>封存的個案</div>
+            <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>{archivedCount} 個</div>
+          </div>
+          <span style={{color:"var(--muted)",fontSize:16}}>›</span>
         </div>
-        <span style={{color:"var(--muted)",fontSize:16}}>›</span>
+        <button className="fab-inline" onClick={onAdd} aria-label="新增個案">＋</button>
       </div>
-      <button className="fab" onClick={onAdd} aria-label="新增個案">＋</button>
     </div>
   );
 }
@@ -1935,7 +1934,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.47</span>
+          <span className="s-val">v15.48</span>
         </div>
       </div>
     </div>
