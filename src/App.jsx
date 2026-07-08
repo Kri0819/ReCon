@@ -143,6 +143,10 @@ html,body{height:100%;background:var(--bg);font-family:var(--sans);font-size:14p
 .s-val{font-size:13px;color:var(--muted)}
 .s-arrow{font-size:16px;color:var(--faint)}
 .s-check{font-size:15px;color:var(--accent);font-weight:700}
+.toggle-switch{width:50px;height:30px;border-radius:15px;background:var(--border2);border:none;cursor:pointer;position:relative;padding:0;transition:background .2s;flex-shrink:0}
+.toggle-switch.on{background:var(--accent)}
+.toggle-thumb{position:absolute;top:2px;left:2px;width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .2s}
+.toggle-switch.on .toggle-thumb{transform:translateX(20px)}
 /* Modals */
 .overlay{position:absolute;inset:0;background:rgba(18,16,12,.48);display:flex;align-items:flex-end;z-index:100;animation:fi .15s;backdrop-filter:blur(3px)}
 .overlay.center{align-items:center;justify-content:center}
@@ -1936,10 +1940,11 @@ function ExportCenterPage({ cases, levels, methods, onBack, showToast }){
 
 function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateCase, showToast, theme, setTheme, weekStartDow, setWeekStartDow }){
   const [page,setPage]=useState("hub");
-  if(page==="methods")  return <MethodsPage  methods={methods} setMethods={setMethods} onBack={()=>setPage("hub")}/>;
-  if(page==="levels")   return <LevelsPage   levels={levels}   setLevels={setLevels}   methods={methods} onBack={()=>setPage("hub")}/>;
-  if(page==="reminder") return <ReminderPage onBack={()=>setPage("hub")}/>;
-  if(page==="export")   return <ExportCenterPage cases={cases} levels={levels} methods={methods} onBack={()=>setPage("hub")} showToast={showToast}/>;
+  if(page==="methods")   return <MethodsPage    methods={methods} setMethods={setMethods} onBack={()=>setPage("hub")}/>;
+  if(page==="levels")    return <LevelsPage     levels={levels}   setLevels={setLevels}   methods={methods} onBack={()=>setPage("hub")}/>;
+  if(page==="reminder")  return <ReminderPage   onBack={()=>setPage("hub")}/>;
+  if(page==="export")    return <ExportCenterPage cases={cases} levels={levels} methods={methods} onBack={()=>setPage("hub")} showToast={showToast}/>;
+  if(page==="weekstart") return <WeekStartPage  weekStartDow={weekStartDow} setWeekStartDow={setWeekStartDow} onBack={()=>setPage("hub")}/>;
   return (
     <div className="screen-pad">
       <div className="ph"><div><div className="ph-eyebrow">ReCon｜再聯絡</div><div className="ph-title">設定</div></div></div>
@@ -1955,31 +1960,18 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
       </div>
       <div className="sec-label">外觀</div>
       <div className="settings-group">
-        <div className="settings-row" onClick={()=>setTheme("light")}>
-          <div className="s-label">淺色模式</div>
-          {theme!=="dark"&&<span className="s-check">✓</span>}
-        </div>
-        <div className="settings-row" onClick={()=>setTheme("dark")}>
+        <div className="settings-row static">
           <div className="s-label">深色模式</div>
-          {theme==="dark"&&<span className="s-check">✓</span>}
+          <button className={`toggle-switch ${theme==="dark"?"on":""}`} onClick={()=>setTheme(theme==="dark"?"light":"dark")} aria-label="切換深色模式">
+            <span className="toggle-thumb"/>
+          </button>
         </div>
       </div>
       <div className="sec-label">偏好設定</div>
       <div className="settings-group">
-        <div className="settings-row static" style={{flexDirection:"column",alignItems:"stretch",gap:10}}>
-          <div>
-            <div className="s-label">週期起始日</div>
-            <div className="s-sub">追蹤計畫「每週／每兩週」的週期範圍從哪天開始算</div>
-          </div>
-          <div className="opt-row" style={{marginBottom:0,flexWrap:"wrap"}}>
-            {DOW_NAMES.map((name,i)=>(
-              <div key={i} className={`opt ${weekStartDow===i?"active":""}`}
-                style={{minWidth:44,flex:"0 0 auto"}}
-                onClick={()=>setWeekStartDow(i)}>
-                {name}
-              </div>
-            ))}
-          </div>
+        <div className="settings-row" onClick={()=>setPage("weekstart")}>
+          <div><div className="s-label">週期起始日</div><div className="s-sub">週{DOW_NAMES[weekStartDow]}</div></div>
+          <span className="s-arrow">›</span>
         </div>
       </div>
       <div className="sec-label">關於</div>
@@ -1989,8 +1981,27 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.50</span>
+          <span className="s-val">v15.51</span>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function WeekStartPage({ weekStartDow, setWeekStartDow, onBack }){
+  return (
+    <div className="screen-pad">
+      <div className="ph"><div><button className="back-btn" onClick={onBack}>‹ 設定</button><div className="ph-title">週期起始日</div></div></div>
+      <div style={{padding:"0 22px 12px",fontSize:12,color:"var(--muted)",lineHeight:1.6}}>
+        追蹤計畫「每週／每兩週」的週期範圍從哪天開始算
+      </div>
+      <div className="settings-group">
+        {DOW_NAMES.map((name,i)=>(
+          <div key={i} className="settings-row" onClick={()=>{setWeekStartDow(i);onBack();}}>
+            <div className="s-label">週{name}</div>
+            {weekStartDow===i&&<span className="s-check">✓</span>}
+          </div>
+        ))}
       </div>
     </div>
   );
