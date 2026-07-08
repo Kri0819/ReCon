@@ -527,46 +527,49 @@ function Toast({msg}){ return <div className="toast">{msg}</div>; }
 
 const LS_ONBOARDED = "rc_onboarded1";
 
-function OB_Illus1(){ // 歡迎
+function OB_IllusLogo({theme}){ // 歡迎：直接使用品牌 LOGO
   return (
-    <svg viewBox="0 0 200 160" width="100%" height="100%">
-      <circle cx="100" cy="80" r="58" fill="var(--accent-lt)"/>
-      <circle cx="100" cy="80" r="34" fill="none" stroke="var(--accent)" strokeWidth="3"/>
-      <circle cx="72" cy="66" r="7" fill="var(--yellow)"/>
-      <circle cx="132" cy="96" r="6" fill="var(--accent-mid)"/>
-      <path d="M100 46 a34 34 0 0 1 24 58" fill="none" stroke="var(--accent)" strokeWidth="3" strokeLinecap="round"/>
-    </svg>
+    <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",position:"relative"}}>
+      <svg viewBox="0 0 200 160" width="100%" height="100%" style={{position:"absolute"}}>
+        <circle cx="100" cy="80" r="58" fill="var(--accent-lt)"/>
+      </svg>
+      <img src={theme==="dark"?LOGO_DARK:LOGO_LIGHT} alt="ReCon" style={{width:88,height:88,objectFit:"contain",position:"relative"}}/>
+    </div>
   );
 }
 function OB_Illus2(){ // 個案管理
+  const rows=[
+    {y:56,  bg:"var(--red-bg)",    line:"var(--red)"},
+    {y:80,  bg:"var(--yellow-bg)", line:"var(--yellow)"},
+    {y:104, bg:"var(--green-bg)",  line:"var(--green)"},
+  ];
   return (
     <svg viewBox="0 0 200 160" width="100%" height="100%">
-      <rect x="34" y="34" width="132" height="30" rx="9" fill="var(--surface)" stroke="var(--border2)" strokeWidth="2"/>
-      <circle cx="52" cy="49" r="9" fill="var(--red-bg)" stroke="var(--red)" strokeWidth="2"/>
-      <rect x="70" y="43" width="60" height="5" rx="2.5" fill="var(--border2)"/>
-      <rect x="70" y="53" width="40" height="4" rx="2" fill="var(--border)"/>
-      <rect x="34" y="72" width="132" height="30" rx="9" fill="var(--surface)" stroke="var(--border2)" strokeWidth="2"/>
-      <circle cx="52" cy="87" r="9" fill="var(--yellow-bg)" stroke="var(--yellow)" strokeWidth="2"/>
-      <rect x="70" y="81" width="60" height="5" rx="2.5" fill="var(--border2)"/>
-      <rect x="70" y="91" width="40" height="4" rx="2" fill="var(--border)"/>
-      <rect x="34" y="110" width="132" height="30" rx="9" fill="var(--surface)" stroke="var(--border2)" strokeWidth="2"/>
-      <circle cx="52" cy="125" r="9" fill="var(--green-bg)" stroke="var(--green)" strokeWidth="2"/>
-      <rect x="70" y="119" width="60" height="5" rx="2.5" fill="var(--border2)"/>
-      <rect x="70" y="129" width="40" height="4" rx="2" fill="var(--border)"/>
+      <circle cx="100" cy="80" r="58" fill="var(--accent-lt)"/>
+      {rows.map((r,i)=>(
+        <g key={i}>
+          <rect x="48" y={r.y-11} width="104" height="22" rx="8" fill="var(--surface)" stroke="var(--border2)" strokeWidth="2"/>
+          <circle cx="63" cy={r.y} r="7" fill={r.bg} stroke={r.line} strokeWidth="2"/>
+          <rect x="78" y={r.y-5} width="46" height="4" rx="2" fill="var(--border2)"/>
+          <rect x="78" y={r.y+3} width="30" height="3" rx="1.5" fill="var(--border)"/>
+        </g>
+      ))}
     </svg>
   );
 }
 function OB_Illus3(){ // 提醒與行事曆
   return (
     <svg viewBox="0 0 200 160" width="100%" height="100%">
-      <rect x="46" y="38" width="108" height="92" rx="12" fill="var(--surface)" stroke="var(--border2)" strokeWidth="2.5"/>
-      <rect x="46" y="38" width="108" height="26" rx="12" fill="var(--accent-lt)"/>
-      <line x1="72" y1="30" x2="72" y2="50" stroke="var(--accent)" strokeWidth="4" strokeLinecap="round"/>
-      <line x1="128" y1="30" x2="128" y2="50" stroke="var(--accent)" strokeWidth="4" strokeLinecap="round"/>
-      {[0,1,2,3].map(r=>[0,1,2,3,4].map(cIdx=>{
-        const cx=64+cIdx*20, cy=80+r*16;
-        const active=(r===1&&cIdx===2);
-        return <circle key={`${r}-${cIdx}`} cx={cx} cy={cy} r={active?5:2.4} fill={active?"var(--yellow)":"var(--border2)"}/>;
+      <circle cx="100" cy="80" r="58" fill="var(--accent-lt)"/>
+      <rect x="58" y="46" width="84" height="72" rx="10" fill="var(--surface)" stroke="var(--border2)" strokeWidth="2.5"/>
+      <rect x="58" y="46" width="84" height="20" rx="10" fill="var(--accent)"/>
+      <rect x="58" y="56" width="84" height="10" fill="var(--accent)"/>
+      <line x1="78" y1="40" x2="78" y2="54" stroke="var(--accent)" strokeWidth="4" strokeLinecap="round"/>
+      <line x1="122" y1="40" x2="122" y2="54" stroke="var(--accent)" strokeWidth="4" strokeLinecap="round"/>
+      {[0,1,2].map(r=>[0,1,2,3].map(cIdx=>{
+        const cx=76+cIdx*16, cy=82+r*14;
+        const active=(r===1&&cIdx===1);
+        return <circle key={`${r}-${cIdx}`} cx={cx} cy={cy} r={active?4.5:2.2} fill={active?"var(--yellow)":"var(--border2)"}/>;
       }))}
     </svg>
   );
@@ -574,27 +577,30 @@ function OB_Illus3(){ // 提醒與行事曆
 function OB_Illus4(){ // 資料安全（無雲端同步警示）
   return (
     <svg viewBox="0 0 200 160" width="100%" height="100%">
-      <rect x="66" y="26" width="68" height="112" rx="14" fill="var(--surface)" stroke="var(--border2)" strokeWidth="2.5"/>
-      <rect x="76" y="40" width="48" height="78" rx="4" fill="var(--surface2)"/>
-      <circle cx="100" cy="128" r="5" fill="var(--border2)"/>
-      <path d="M76 74 q6 -14 20 -14 q4 -10 16 -10 q14 0 16 12 q10 1 10 12 q0 12 -12 12 h-38 q-12 0 -12 -12 q0 -8 8 -11 z" fill="var(--surface)" stroke="var(--muted)" strokeWidth="2.5"/>
-      <line x1="66" y1="106" x2="134" y2="52" stroke="var(--red)" strokeWidth="3.5" strokeLinecap="round"/>
+      <circle cx="100" cy="80" r="58" fill="var(--red-bg)"/>
+      <rect x="72" y="34" width="56" height="92" rx="12" fill="var(--surface)" stroke="var(--border2)" strokeWidth="2.5"/>
+      <rect x="80" y="45" width="40" height="62" rx="4" fill="var(--surface2)"/>
+      <circle cx="100" cy="117" r="4.5" fill="var(--border2)"/>
+      <path d="M84 72 q4 -11 16 -11 q3.5 -8 13 -8 q11 0 13 9.5 q8 0.5 8 9.5 q0 9.5 -9.5 9.5 h-30 q-9.5 0 -9.5 -9.5 q0 -6.5 6.5 -8.7 z"
+        fill="var(--surface)" stroke="var(--muted)" strokeWidth="2.5"/>
+      <line x1="80" y1="90" x2="120" y2="58" stroke="var(--red)" strokeWidth="4" strokeLinecap="round"/>
     </svg>
   );
 }
 function OB_Illus5(){ // 完成
   return (
     <svg viewBox="0 0 200 160" width="100%" height="100%">
-      <circle cx="100" cy="80" r="46" fill="var(--green-bg)" stroke="var(--green)" strokeWidth="2.5"/>
-      <path d="M78 82 l16 16 l30 -34" fill="none" stroke="var(--green)" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round"/>
-      <circle cx="150" cy="46" r="5" fill="var(--yellow)"/>
-      <circle cx="46" cy="106" r="6" fill="var(--accent-mid)"/>
+      <circle cx="100" cy="80" r="58" fill="var(--green-bg)"/>
+      <circle cx="100" cy="80" r="34" fill="none" stroke="var(--green)" strokeWidth="3"/>
+      <path d="M84 81 l12 12 l22 -26" fill="none" stroke="var(--green)" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round"/>
+      <circle cx="146" cy="52" r="5" fill="var(--yellow)"/>
+      <circle cx="54" cy="106" r="6" fill="var(--accent-mid)"/>
     </svg>
   );
 }
 
 const ONBOARDING_SLIDES = [
-  { illus: OB_Illus1, title: "歡迎使用 ReCon｜再聯絡",
+  { illus: OB_IllusLogo, title: "歡迎使用 ReCon｜再聯絡",
     body: "專為社工／個案管理者設計的聯絡追蹤工具，幫你記住每一位個案下次該什麼時候聯繫、用什麼方式聯繫。" },
   { illus: OB_Illus2, title: "個案與追蹤計畫",
     body: "為每位個案設定關懷等級與追蹤計畫（例如每週電話一次），系統會自動幫你算出下次該聯繫的日期，並在到期時提醒你。" },
@@ -606,12 +612,12 @@ const ONBOARDING_SLIDES = [
     body: "現在就開始新增你的第一個個案吧！之後隨時可以在「設定」頁重新觀看這份教學。" },
 ];
 
-function OnboardingBody({ step, setStep, total }){
+function OnboardingBody({ step, setStep, total, theme }){
   const s = ONBOARDING_SLIDES[step];
   const Illus = s.illus;
   return (
     <>
-      <div style={{width:"100%",maxWidth:220,height:150,margin:"0 auto 18px"}}><Illus/></div>
+      <div style={{width:"100%",maxWidth:220,height:150,margin:"0 auto 18px",position:"relative"}}><Illus theme={theme}/></div>
       <div style={{fontFamily:"var(--serif)",fontSize:19,fontWeight:400,textAlign:"center",marginBottom:10,color:s.danger?"var(--red)":"var(--text)"}}>{s.title}</div>
       <div style={{fontSize:13,color:"var(--text2)",lineHeight:1.8,whiteSpace:"pre-line",textAlign:"center",marginBottom:20}}>{s.body}</div>
       <div style={{display:"flex",justifyContent:"center",gap:6,marginBottom:18}}>
@@ -624,13 +630,13 @@ function OnboardingBody({ step, setStep, total }){
 }
 
 // 首次啟動：中央卡片彈窗
-function OnboardingModal({ onFinish }){
+function OnboardingModal({ onFinish, theme }){
   const [step,setStep]=useState(0);
   const last = step===ONBOARDING_SLIDES.length-1;
   return (
     <div className="overlay center">
       <div className="sheet center" style={{maxWidth:340}}>
-        <OnboardingBody step={step} setStep={setStep} total={ONBOARDING_SLIDES.length}/>
+        <OnboardingBody step={step} setStep={setStep} total={ONBOARDING_SLIDES.length} theme={theme}/>
         <div className="btn-row">
           {!last
             ? <button className="act-btn" onClick={onFinish}>跳過</button>
@@ -643,14 +649,14 @@ function OnboardingModal({ onFinish }){
 }
 
 // 設定頁重看：滿版頁面
-function OnboardingPage({ onBack }){
+function OnboardingPage({ onBack, theme }){
   const [step,setStep]=useState(0);
   const last = step===ONBOARDING_SLIDES.length-1;
   return (
     <div className="screen-pad">
       <div className="ph"><div><button className="back-btn" onClick={onBack}>‹ 設定</button><div className="ph-title">使用教學</div></div></div>
       <div style={{padding:"24px 22px 0"}}>
-        <OnboardingBody step={step} setStep={setStep} total={ONBOARDING_SLIDES.length}/>
+        <OnboardingBody step={step} setStep={setStep} total={ONBOARDING_SLIDES.length} theme={theme}/>
         <div className="btn-row">
           <button className="act-btn" disabled={step===0} style={step===0?{opacity:.4}:{}} onClick={()=>setStep(s=>Math.max(0,s-1))}>上一步</button>
           {last
@@ -2128,7 +2134,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
   if(page==="reminder")  return <ReminderPage   onBack={()=>setPage("hub")}/>;
   if(page==="export")    return <ExportCenterPage cases={cases} levels={levels} methods={methods} onBack={()=>setPage("hub")} showToast={showToast}/>;
   if(page==="weekstart") return <WeekStartPage  weekStartDow={weekStartDow} setWeekStartDow={setWeekStartDow} onBack={()=>setPage("hub")}/>;
-  if(page==="onboarding") return <OnboardingPage onBack={()=>setPage("hub")}/>;
+  if(page==="onboarding") return <OnboardingPage onBack={()=>setPage("hub")} theme={theme}/>;
   return (
     <div className="screen-pad">
       <div className="ph"><div><div className="ph-eyebrow">ReCon｜再聯絡</div><div className="ph-title">設定</div></div></div>
@@ -2172,7 +2178,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.56</span>
+          <span className="s-val">v15.57</span>
         </div>
       </div>
     </div>
@@ -2288,7 +2294,7 @@ export default function App(){
           {tab==="settings" &&<SettingsScreen cases={cases} methods={methods} setMethods={setMethods} levels={levels} setLevels={setLevels} updateCase={updateCase} showToast={showToast} theme={theme} setTheme={setTheme} weekStartDow={weekStartDow} setWeekStartDow={setWeekStartDow}/>}
         </div>
         {toast&&<Toast msg={toast}/>}
-        {showOnboarding&&<OnboardingModal onFinish={finishOnboarding}/>}
+        {showOnboarding&&<OnboardingModal onFinish={finishOnboarding} theme={theme}/>}
         <div className="bnav">
           {NAV.map(n=>(
             <button key={n.key} className={`bnav-btn ${(tab===n.key||((tab==="detail"||tab==="editCase"||tab==="addCase")&&n.key==="cases"))?"active":""}`}
