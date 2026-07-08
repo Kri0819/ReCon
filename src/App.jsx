@@ -132,8 +132,6 @@ html,body{height:100%;background:var(--bg);font-family:var(--sans);font-size:14p
 .settings-row{display:flex;align-items:center;justify-content:space-between;padding:15px 18px;border-bottom:1px solid var(--border);min-height:54px;cursor:pointer;transition:background .1s}
 .archive-entry{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);cursor:pointer;transition:opacity .12s}
 .archive-entry:active{opacity:.7}
-.fab-inline{width:56px;height:56px;border-radius:50%;background:var(--accent);color:#fff;font-size:26px;display:flex;align-items:center;justify-content:center;border:none;cursor:pointer;box-shadow:0 4px 14px rgba(18,16,12,.24);flex-shrink:0;font-family:var(--sans);line-height:1}
-.fab-inline:active{opacity:.85}
 .settings-row:last-child{border-bottom:none}
 .settings-row:active{background:var(--surface2)}
 .settings-row.static{cursor:default}
@@ -165,6 +163,9 @@ select.inp{cursor:pointer;appearance:auto;height:44px}
 .inp-err{font-size:11px;color:var(--red);margin-top:-10px;margin-bottom:14px;font-weight:500}
 .opt-row{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
 .opt{flex:1;min-width:52px;height:40px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border2);border-radius:10px;font-size:12px;font-weight:500;font-family:var(--sans);background:var(--surface);color:var(--text2);cursor:pointer;transition:all .12s;box-shadow:0 1px 2px rgba(18,16,12,.04)}
+.swatch-opt{position:relative;gap:5px;overflow:hidden}
+.swatch-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;border:1px solid rgba(0,0,0,.1)}
+.swatch-opt input[type="color"]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:none;padding:0}
 .opt.active{border-color:var(--accent);background:var(--accent-lt);color:var(--accent);box-shadow:none}
 .step-bar{display:flex;gap:4px;margin-bottom:18px}
 .step-seg{height:2px;flex:1;border-radius:1px;background:var(--border);transition:background .2s}
@@ -288,11 +289,8 @@ const LEVEL_COLOR_OPTIONS = [
   {key:"red",    label:"紅", bg:"#FDECEA", color:"#C0392B"},
   {key:"yellow", label:"黃", bg:"#FDF8EE", color:"#B8860B"},
   {key:"green",  label:"綠", bg:"#EDF5F1", color:"#2D6A4F"},
-  {key:"blue",   label:"藍", bg:"#EAF1FB", color:"#2C5DA8"},
-  {key:"purple", label:"紫", bg:"#F3ECFA", color:"#7C4DA8"},
-  {key:"gray",   label:"灰", bg:"#F0EEEA", color:"#6B6558"},
 ];
-const LEVEL_COLOR_HEX = {red:"#C0392B",yellow:"#B8860B",green:"#2D6A4F",blue:"#2C5DA8",purple:"#7C4DA8",gray:"#6B6558",faint:"#8A8578"};
+const LEVEL_COLOR_HEX = {red:"#C0392B",yellow:"#B8860B",green:"#2D6A4F",faint:"#8A8578"};
 // 取得等級的顏色（優先使用自訂色 hex，否則回退到預設 colorKey 對應色，最後 fallback 灰色）
 function levelColorHex(l){ return l?.color || LEVEL_COLOR_HEX[l?.colorKey] || LEVEL_COLOR_HEX.faint; }
 function hexToRgba(hex, a){
@@ -1100,16 +1098,14 @@ function CasesScreen({ cases, methods, levels, onAdd, onOpen, updateCase, delete
         );
       })}
       </div>
-      <div style={{display:"flex",alignItems:"center",gap:10,margin:"10px 22px 14px",flexShrink:0}}>
-        <div className="archive-entry" style={{flex:1,margin:0}} onClick={()=>setPage("archived")}>
-          <div>
-            <div style={{fontSize:13,fontWeight:500,color:"var(--text2)"}}>封存的個案</div>
-            <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>{archivedCount} 個</div>
-          </div>
-          <span style={{color:"var(--muted)",fontSize:16}}>›</span>
+      <div className="archive-entry" style={{margin:"10px 90px 14px 22px"}} onClick={()=>setPage("archived")}>
+        <div>
+          <div style={{fontSize:13,fontWeight:500,color:"var(--text2)"}}>封存的個案</div>
+          <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>{archivedCount} 個</div>
         </div>
-        <button className="fab-inline" onClick={onAdd} aria-label="新增個案">＋</button>
+        <span style={{color:"var(--muted)",fontSize:16}}>›</span>
       </div>
+      <button className="fab" onClick={onAdd} aria-label="新增個案">＋</button>
     </div>
   );
 }
@@ -1751,14 +1747,14 @@ function LevelsPage({ levels, setLevels, methods, onBack }){
               </div>
             </div>
             <label className="inp-label">顏色</label>
-            <div className="opt-row" style={{marginBottom:8}}>
+            <div className="opt-row" style={{marginBottom:12}}>
               {LEVEL_COLOR_OPTIONS.map(c=><div key={c.key} className={`opt ${form.color===c.color?"active":""}`} style={form.color===c.color?{background:c.bg,borderColor:c.color,color:c.color}:{}} onClick={()=>setForm(x=>({...x,color:c.color,colorKey:c.key}))}>{c.label}</div>)}
-            </div>
-            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-              <input type="color" value={form.color||levelColorHex(form)}
-                onChange={e=>setForm(x=>({...x,color:e.target.value,colorKey:"custom"}))}
-                style={{width:44,height:36,border:"1px solid var(--border2)",borderRadius:8,padding:2,cursor:"pointer",background:"var(--surface)"}}/>
-              <span style={{fontSize:12,color:"var(--muted)"}}>自訂顏色</span>
+              <label className={`opt swatch-opt ${form.colorKey==="custom"?"active":""}`}
+                style={form.colorKey==="custom"?{background:hexToRgba(form.color,.12),borderColor:form.color,color:form.color}:{}}>
+                <span className="swatch-dot" style={{background:levelColorHex(form)}}/>自訂
+                <input type="color" value={form.color||levelColorHex(form)}
+                  onChange={e=>setForm(x=>({...x,color:e.target.value,colorKey:"custom"}))}/>
+              </label>
             </div>
             <div style={{borderTop:"1px solid var(--border)",marginBottom:12,paddingTop:12}}>
               <TrackingPlanEditor plans={planEdit} setPlans={setPlanEdit} methods={safe} defaultFreq={freqKeyFromDays(form.days)}/>
@@ -1829,14 +1825,14 @@ function LevelsPage({ levels, setLevels, methods, onBack }){
             </div>
           </div>
           <label className="inp-label">顏色</label>
-          <div className="opt-row" style={{marginBottom:8}}>
+          <div className="opt-row" style={{marginBottom:12}}>
             {LEVEL_COLOR_OPTIONS.map(c=><div key={c.key} className={`opt ${newForm.color===c.color?"active":""}`} style={newForm.color===c.color?{background:c.bg,borderColor:c.color,color:c.color}:{}} onClick={()=>setNewForm(f=>({...f,color:c.color,colorKey:c.key}))}>{c.label}</div>)}
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-            <input type="color" value={newForm.color||levelColorHex(newForm)}
-              onChange={e=>setNewForm(f=>({...f,color:e.target.value,colorKey:"custom"}))}
-              style={{width:44,height:36,border:"1px solid var(--border2)",borderRadius:8,padding:2,cursor:"pointer",background:"var(--surface)"}}/>
-            <span style={{fontSize:12,color:"var(--muted)"}}>自訂顏色</span>
+            <label className={`opt swatch-opt ${newForm.colorKey==="custom"?"active":""}`}
+              style={newForm.colorKey==="custom"?{background:hexToRgba(newForm.color,.12),borderColor:newForm.color,color:newForm.color}:{}}>
+              <span className="swatch-dot" style={{background:levelColorHex(newForm)}}/>自訂
+              <input type="color" value={newForm.color||levelColorHex(newForm)}
+                onChange={e=>setNewForm(f=>({...f,color:e.target.value,colorKey:"custom"}))}/>
+            </label>
           </div>
           <div style={{borderTop:"1px solid var(--border)",marginBottom:12,paddingTop:12}}>
             <TrackingPlanEditor plans={newPlans} setPlans={setNewPlans} methods={safe} defaultFreq={freqKeyFromDays(newForm.days)}/>
@@ -2009,7 +2005,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.53</span>
+          <span className="s-val">v15.54</span>
         </div>
       </div>
     </div>
