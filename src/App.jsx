@@ -1950,8 +1950,8 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
       <div className="ph"><div><div className="ph-eyebrow">ReCon｜再聯絡</div><div className="ph-title">設定</div></div></div>
       <div className="sec-label">管理</div>
       <div className="settings-group">
-        <div className="settings-row" onClick={()=>setPage("methods")}><div><div className="s-label">聯絡方式管理</div><div className="s-sub">{methods.length} 種方式</div></div><span className="s-arrow">›</span></div>
-        <div className="settings-row" onClick={()=>setPage("levels")}><div><div className="s-label">關懷等級管理</div><div className="s-sub">{Object.keys(levels).length} 個等級（含預設追蹤計畫）</div></div><span className="s-arrow">›</span></div>
+        <div className="settings-row" onClick={()=>setPage("methods")}><div className="s-label">聯絡方式管理</div><span className="s-arrow">›</span></div>
+        <div className="settings-row" onClick={()=>setPage("levels")}><div className="s-label">關懷等級管理</div><span className="s-arrow">›</span></div>
         <div className="settings-row" onClick={()=>setPage("reminder")}><div className="s-label">提醒設定</div><span className="s-arrow">›</span></div>
       </div>
       <div className="sec-label">資料</div>
@@ -1961,7 +1961,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
       <div className="sec-label">外觀</div>
       <div className="settings-group">
         <div className="settings-row static">
-          <div className="s-label">深色模式</div>
+          <div className="s-label">使用深色模式</div>
           <button className={`toggle-switch ${theme==="dark"?"on":""}`} onClick={()=>setTheme(theme==="dark"?"light":"dark")} aria-label="切換深色模式">
             <span className="toggle-thumb"/>
           </button>
@@ -1970,8 +1970,11 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
       <div className="sec-label">偏好設定</div>
       <div className="settings-group">
         <div className="settings-row" onClick={()=>setPage("weekstart")}>
-          <div><div className="s-label">週期起始日</div><div className="s-sub">週{DOW_NAMES[weekStartDow]}</div></div>
-          <span className="s-arrow">›</span>
+          <div className="s-label">週期起始日</div>
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <span className="s-val">週{DOW_NAMES[weekStartDow]}</span>
+            <span className="s-arrow">›</span>
+          </div>
         </div>
       </div>
       <div className="sec-label">關於</div>
@@ -1981,7 +1984,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.51</span>
+          <span className="s-val">v15.52</span>
         </div>
       </div>
     </div>
