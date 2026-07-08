@@ -1735,7 +1735,14 @@ function LevelsPage({ levels, setLevels, methods, onBack }){
 
         if(editKey===k) return (
           <div key={k} className="card-row" style={{display:"block",cursor:"default"}}>
-            <label className="inp-label">名稱</label><input className="inp" value={form.label} onChange={e=>setForm(x=>({...x,label:e.target.value}))} autoFocus/>
+            <label className="inp-label">名稱（會顯示在個案列表的圓圈標籤裡，1-4 個字為佳）</label>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+              <div className={`level-circle${form.label.length>1?" lc-long":""}`}
+                style={{flexShrink:0,background:hexToRgba(levelColorHex(form),.12),color:levelColorHex(form),border:`1.5px solid ${hexToRgba(levelColorHex(form),.35)}`}}>
+                {form.label||"？"}
+              </div>
+              <input className="inp" style={{flex:1,marginBottom:0}} value={form.label} onChange={e=>setForm(x=>({...x,label:e.target.value}))} autoFocus/>
+            </div>
             <div style={{display:"flex",gap:8}}>
               <div style={{flex:1}}>
                 <label className="inp-label">頻率說明</label>
@@ -2005,7 +2012,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.54</span>
+          <span className="s-val">v15.55</span>
         </div>
       </div>
     </div>
