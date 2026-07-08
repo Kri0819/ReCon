@@ -572,18 +572,23 @@ function TrackingPlanEditor({ plans, setPlans, methods, defaultFreq }){
 
       {!plans.length&&!adding&&<div style={{fontSize:12,color:"var(--muted)",padding:"6px 0"}}>尚無追蹤任務</div>}
 
-      {plans.map(p=>(
+      {plans.map(p=>{
+        const stale = !methods.includes(p.method);
+        return (
         <div key={p.id} className="task-item">
           <div style={{flex:1}}>
             <div style={{fontSize:13,fontWeight:500}}>{p.method}</div>
-            <div style={{fontSize:11,color:"var(--muted)",marginTop:1}}>
-              {FREQ_OPTIONS.find(f=>f.key===p.freq)?.label} · {p.timesPerPeriod}次
-              {p.nextDue?` · 下次 ${p.nextDue.slice(5)}`:""}
-            </div>
+            {stale
+              ? <div style={{fontSize:11,color:"var(--red)",marginTop:1,fontWeight:600}}>⚠ 聯絡方式已停用</div>
+              : <div style={{fontSize:11,color:"var(--muted)",marginTop:1}}>
+                  {FREQ_OPTIONS.find(f=>f.key===p.freq)?.label} · {p.timesPerPeriod}次
+                  {p.nextDue?` · 下次 ${p.nextDue.slice(5)}`:""}
+                </div>}
           </div>
           <button className="act-btn danger" style={{fontSize:11,padding:"3px 10px",flexShrink:0}} onClick={()=>remove(p.id)}>移除</button>
         </div>
-      ))}
+        );
+      })}
 
       {adding&&(
         <div style={{background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:10,padding:"12px 14px",marginTop:4}}>
@@ -1250,7 +1255,9 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast,
               <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between"}}>
                 <div style={{flex:1}}>
                   <div className="plan-name">{r.method}</div>
-                  <div className="plan-freq">{FREQ_OPTIONS.find(f=>f.key===r.freq)?.label}</div>
+                  {methods.includes(r.method)
+                    ? <div className="plan-freq">{FREQ_OPTIONS.find(f=>f.key===r.freq)?.label}</div>
+                    : <div className="plan-freq" style={{color:"var(--red)",fontWeight:600}}>⚠ 聯絡方式已停用，請更新追蹤任務</div>}
                 </div>
                 <div className={`plan-prog ${r.done>=r.goal?"done":"todo"}`}>
                   {r.done}/{r.goal} {r.done>=r.goal?"✓":"⚠"}
@@ -1620,23 +1627,41 @@ function CalendarScreen({ cases, onOpen }){
 // SETTINGS PAGES
 // ─────────────────────────────────────────────────────────────────────────────
 
-function MethodsPage({ methods, setMethods, onBack }){
+function MethodsPage({ methods, setMethods, cases, updateCase, onBack }){
   const [editing,setEditing]=useState(null); const [editVal,setEditVal]=useState(""); const [adding,setAdding]=useState(false); const [newVal,setNewVal]=useState("");
   const [swipedIdx,setSwipedIdx]=useState(null); const touchStartX=useRef(0);
+  const [delConfirmIdx,setDelConfirmIdx]=useState(null);
+
   function startEdit(i){setEditing(i);setEditVal(methods[i]);setAdding(false);}
   function saveEdit(){const v=editVal.trim();if(!v){setEditing(null);return;}setMethods(prev=>prev.map((m,i)=>i===editing?v:m));setEditing(null);}
-  function del(i){if(methods.length<=1)return;setMethods(prev=>prev.filter((_,j)=>j!==i));setEditing(null);setSwipedIdx(null);}
+  // 計算這個聯絡方式目前被多少個案的追蹤任務使用，刪除前提醒使用者
+  function usageCount(m){ return (cases||[]).reduce((sum,c)=>sum+(c.trackingPlans||[]).filter(p=>p.method===m).length,0); }
+  function askDel(i){ setDelConfirmIdx(i); setSwipedIdx(null); setEditing(null); }
+  function del(i){if(methods.length<=1)return;setMethods(prev=>prev.filter((_,j)=>j!==i));setEditing(null);setSwipedIdx(null);setDelConfirmIdx(null);}
   function addM(){const v=newVal.trim();if(!v||methods.includes(v))return;setMethods(prev=>[...prev,v]);setNewVal("");setAdding(false);}
   return (
     <div className="screen-pad">
       <div className="ph"><div><button className="back-btn" onClick={onBack}>‹ 設定</button><div className="ph-title">聯絡方式</div></div><button className="ph-action" onClick={()=>{setAdding(true);setEditing(null);}}>＋</button></div>
 
       {methods.map((m,i)=>{
+        if(delConfirmIdx===i){
+          const cnt=usageCount(m);
+          return (
+            <div key={i} className="card-row" style={{flexDirection:"column",alignItems:"stretch",gap:8,cursor:"default"}}>
+              <div style={{fontSize:13,fontWeight:500,color:"var(--red)"}}>確認刪除「{m}」？</div>
+              {cnt>0&&<div style={{fontSize:12,color:"var(--muted)",lineHeight:1.6}}>目前有 {cnt} 個追蹤任務使用這個聯絡方式，刪除後這些任務會標示「聯絡方式已停用」，需要手動修改成其他方式。</div>}
+              <div style={{display:"flex",gap:8}}>
+                <button className="act-btn" style={{flex:1}} onClick={()=>setDelConfirmIdx(null)}>取消</button>
+                <button className="act-btn danger" style={{flex:1}} onClick={()=>del(i)}>確認刪除</button>
+              </div>
+            </div>
+          );
+        }
         if(editing===i) return (
           <div key={i} className="card-row" style={{gap:8,cursor:"default"}}>
             <input className="inp" style={{flex:1,marginBottom:0,height:36,padding:"0 12px",fontSize:13}} value={editVal} onChange={e=>setEditVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")saveEdit();if(e.key==="Escape")setEditing(null);}} autoFocus/>
+            <button className="act-btn" style={{padding:"6px 12px",fontSize:12}} onClick={()=>setEditing(null)}>取消</button>
             <button className="act-btn primary" style={{padding:"6px 12px",fontSize:12}} onClick={saveEdit}>存</button>
-            <button className="act-btn danger" style={{padding:"6px 10px",fontSize:12}} onClick={()=>del(i)} disabled={methods.length<=1}>刪</button>
           </div>
         );
         const isSwiped=swipedIdx===i; const canDelete=methods.length>1;
@@ -1644,7 +1669,7 @@ function MethodsPage({ methods, setMethods, onBack }){
           <div className="swipe-row" key={i}>
             {canDelete&&(
               <div className="swipe-actions" style={{width:76,justifyContent:"center"}}>
-                <button className="swipe-btn sb-delete" onClick={()=>del(i)}>
+                <button className="swipe-btn sb-delete" onClick={()=>askDel(i)}>
                   <span className="swipe-btn-icon">✕</span>刪除
                 </button>
               </div>
@@ -1940,7 +1965,7 @@ function ExportCenterPage({ cases, levels, methods, onBack, showToast }){
 
 function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateCase, showToast, theme, setTheme, weekStartDow, setWeekStartDow }){
   const [page,setPage]=useState("hub");
-  if(page==="methods")   return <MethodsPage    methods={methods} setMethods={setMethods} onBack={()=>setPage("hub")}/>;
+  if(page==="methods")   return <MethodsPage    methods={methods} setMethods={setMethods} cases={cases} updateCase={updateCase} onBack={()=>setPage("hub")}/>;
   if(page==="levels")    return <LevelsPage     levels={levels}   setLevels={setLevels}   methods={methods} onBack={()=>setPage("hub")}/>;
   if(page==="reminder")  return <ReminderPage   onBack={()=>setPage("hub")}/>;
   if(page==="export")    return <ExportCenterPage cases={cases} levels={levels} methods={methods} onBack={()=>setPage("hub")} showToast={showToast}/>;
@@ -1984,7 +2009,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.52</span>
+          <span className="s-val">v15.53</span>
         </div>
       </div>
     </div>
