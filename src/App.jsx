@@ -2012,12 +2012,112 @@ function loadReminderPrefs(){
 }
 function saveReminderPrefs(p){ try{localStorage.setItem(LS_REMINDERS,JSON.stringify(p));}catch{} }
 
+// base64url → Uint8Array，瀏覽器 PushManager.subscribe 需要這個格式的公鑰
+function urlBase64ToUint8Array(base64String){
+  const padding = "=".repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g,"+").replace(/_/g,"/");
+  const rawData = atob(base64);
+  const arr = new Uint8Array(rawData.length);
+  for(let i=0;i<rawData.length;++i) arr[i]=rawData.charCodeAt(i);
+  return arr;
+}
+
 function ReminderPage({ onBack }){
   const [prefs,setPrefs]=useState(loadReminderPrefs);
-  function update(patch){ setPrefs(prev=>{ const next={...prev,...patch}; saveReminderPrefs(next); return next; }); }
+  // checking | unsupported | denied | off | subscribed
+  const [pushStatus,setPushStatus]=useState("checking");
+  const [pushBusy,setPushBusy]=useState(false);
+  const [pushErr,setPushErr]=useState("");
+
+  useEffect(()=>{
+    (async ()=>{
+      if(!("serviceWorker" in navigator) || !("PushManager" in window)){ setPushStatus("unsupported"); return; }
+      if(typeof Notification!=="undefined" && Notification.permission==="denied"){ setPushStatus("denied"); return; }
+      try{
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        setPushStatus(sub?"subscribed":"off");
+      }catch{ setPushStatus("off"); }
+    })();
+  },[]);
+
+  async function syncSubscription(nextPrefs){
+    try{
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if(!sub) return;
+      await fetch("/api/subscribe",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({subscription:sub,prefs:nextPrefs})});
+    }catch{}
+  }
+
+  function update(patch){
+    setPrefs(prev=>{
+      const next={...prev,...patch};
+      saveReminderPrefs(next);
+      if(pushStatus==="subscribed") syncSubscription(next);
+      return next;
+    });
+  }
+
+  async function enablePush(){
+    setPushErr(""); setPushBusy(true);
+    try{
+      if(!("serviceWorker" in navigator) || !("PushManager" in window)){ setPushStatus("unsupported"); setPushBusy(false); return; }
+      const perm = await Notification.requestPermission();
+      if(perm!=="granted"){ setPushStatus(perm==="denied"?"denied":"off"); setPushBusy(false); return; }
+      const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+      if(!vapidKey){ setPushErr("尚未設定 VAPID 金鑰，請聯絡開發者完成後端設定"); setPushBusy(false); return; }
+      const reg = await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if(!sub){
+        sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: urlBase64ToUint8Array(vapidKey) });
+      }
+      const res = await fetch("/api/subscribe",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({subscription:sub,prefs})});
+      if(!res.ok) throw new Error("伺服器儲存失敗");
+      setPushStatus("subscribed");
+    }catch(err){
+      setPushErr("啟用失敗："+(err.message||"請確認網路連線"));
+    }
+    setPushBusy(false);
+  }
+
+  async function disablePush(){
+    setPushBusy(true);
+    try{
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if(sub) await sub.unsubscribe();
+      await fetch("/api/unsubscribe",{method:"POST"});
+      setPushStatus("off");
+    }catch{}
+    setPushBusy(false);
+  }
+
   return (
     <div className="screen-pad">
       <div className="ph"><div><button className="back-btn" onClick={onBack}>‹ 設定</button><div className="ph-title">提醒設定</div></div></div>
+
+      <div className="sec-label">推播通知</div>
+      <div className="settings-group">
+        <div className="settings-row static">
+          <div>
+            <div className="s-label">啟用推播通知</div>
+            <div className="s-sub">
+              {pushStatus==="checking"&&"檢查中…"}
+              {pushStatus==="unsupported"&&"此瀏覽器不支援推播通知"}
+              {pushStatus==="denied"&&"通知權限已被拒絕，請至系統設定開啟"}
+              {pushStatus==="off"&&"尚未開啟，開啟後即使沒開啟 App 也會收到提醒"}
+              {pushStatus==="subscribed"&&"已開啟，時間到會自動推播提醒"}
+            </div>
+          </div>
+          {(pushStatus==="off")&&<button className="act-btn primary" style={{fontSize:12,padding:"6px 14px",flexShrink:0}} disabled={pushBusy} onClick={enablePush}>{pushBusy?"處理中…":"開啟"}</button>}
+          {pushStatus==="subscribed"&&<button className="act-btn" style={{fontSize:12,padding:"6px 14px",flexShrink:0}} disabled={pushBusy} onClick={disablePush}>{pushBusy?"處理中…":"關閉"}</button>}
+        </div>
+        {pushErr&&<div style={{padding:"0 16px 12px",fontSize:11,color:"var(--red)"}}>{pushErr}</div>}
+        <div style={{padding:"10px 16px 14px",fontSize:11,color:"var(--muted)",lineHeight:1.7,borderTop:"1px solid var(--border)"}}>
+          受限於免費方案的伺服器排程，實際推播時間會落在「每日提醒時間所在的整點區間」內（例如設定 07:50，可能在 07:00–07:59 之間送達），每週提醒同理。若需要更精準的時間，需要升級後端方案。
+        </div>
+      </div>
 
       <div className="sec-label">每日提醒</div>
       <div className="settings-group">
@@ -2178,7 +2278,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.57</span>
+          <span className="s-val">v15.58</span>
         </div>
       </div>
     </div>
