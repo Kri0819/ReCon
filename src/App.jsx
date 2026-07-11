@@ -10,9 +10,9 @@ const css = `
   --bg:#F8F7F4;--surface:#FFFFFF;--surface2:#F4F3F0;
   --border:#E8E6E0;--border2:#D4D1CA;
   --text:#1E1C18;--text2:#3C3A34;--muted:#928F86;--faint:#C8C5BC;
-  --red:#C0392B;--red-bg:#FDF0EF;
-  --yellow:#B8860B;--yellow-bg:#FDF8EC;
-  --green:#2D6A4F;--green-bg:#EDF5F1;
+  --red:#C0392B;--red-bg:#FDF0EF;--red-border:#EDCFCC;
+  --yellow:#B8860B;--yellow-bg:#FDF8EC;--yellow-border:#EDD9A0;
+  --green:#2D6A4F;--green-bg:#EDF5F1;--green-border:#A8D8BC;
   --accent:#2C4A7C;--accent-lt:#EBF0F9;--accent-mid:#4A6FA0;
   --serif:'Noto Serif TC',serif;--sans:'Inter',system-ui,sans-serif;--r:12px;
 }
@@ -20,13 +20,13 @@ const css = `
   --bg:#0F1520;--surface:#1A2432;--surface2:#141C28;
   --border:#2C3A4C;--border2:#3A4A5E;
   --text:#FFFFFF;--text2:#D8E0EA;--muted:#9AACBE;--faint:#4A5A6E;
-  --red:#FF6B6B;--red-bg:#2E1818;
-  --yellow:#F0B840;--yellow-bg:#2A2008;
-  --green:#5FC088;--green-bg:#0F241A;
+  --red:#FF6B6B;--red-bg:#2E1818;--red-border:#4A2828;
+  --yellow:#F0B840;--yellow-bg:#2A2008;--yellow-border:#4A3C18;
+  --green:#5FC088;--green-bg:#0F241A;--green-border:#254A38;
   --accent:#7FB0E8;--accent-lt:#1E3248;--accent-mid:#6FA0D8;
 }
 html,body{height:100%;background:var(--bg);font-family:var(--sans);font-size:14px;line-height:1.55;color:var(--text);-webkit-font-smoothing:antialiased}
-.shell{width:100%;height:100dvh;max-width:430px;margin:0 auto;background:var(--bg);display:flex;flex-direction:column;position:relative;overflow:hidden}
+.shell{width:100%;height:100dvh;max-width:430px;margin:0 auto;background:var(--bg);color:var(--text);display:flex;flex-direction:column;position:relative;overflow:hidden}
 .screen{flex:1;overflow-y:auto;overflow-x:hidden}
 .screen::-webkit-scrollbar{display:none}
 .screen-pad{padding-bottom:24px}
@@ -52,9 +52,9 @@ html,body{height:100%;background:var(--bg);font-family:var(--sans);font-size:14p
 .spill.green{background:var(--green-bg);color:var(--green)}.dot.green{background:var(--green)}
 .spill.faint{background:var(--surface2);color:var(--muted)}.dot.faint{background:var(--faint)}
 .lvl-badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.03em;white-space:nowrap;flex-shrink:0}
-.lvl-red{background:var(--red-bg);color:var(--red);border:1px solid #F5CECA}
-.lvl-yellow{background:var(--yellow-bg);color:var(--yellow);border:1px solid #EDD9A0}
-.lvl-green{background:var(--green-bg);color:var(--green);border:1px solid #A8D8BC}
+.lvl-red{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+.lvl-yellow{background:var(--yellow-bg);color:var(--yellow);border:1px solid var(--yellow-border)}
+.lvl-green{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
 .lvl-faint{background:var(--surface2);color:var(--muted);border:1px solid var(--border)}
 /* Tracking progress */
 .plan-block{margin:0 22px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
@@ -80,7 +80,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--sans);font-size:14p
 .act-btn{font-size:12px;font-weight:500;font-family:var(--sans);padding:6px 14px;border-radius:8px;border:1px solid var(--border2);background:var(--surface);color:var(--text2);cursor:pointer;white-space:nowrap;transition:all .12s;letter-spacing:.01em}
 .act-btn:active{opacity:.75}
 .act-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-.act-btn.danger{color:var(--red);border-color:#EDCFCC;background:var(--red-bg)}
+.act-btn.danger{color:var(--red);border-color:var(--red-border);background:var(--red-bg)}
 .act-btn:disabled{opacity:.3;cursor:default}
 .back-btn{display:flex;align-items:center;gap:6px;font-size:16px;color:var(--accent);font-weight:500;cursor:pointer;border:none;background:none;font-family:var(--sans);padding:8px 12px 8px 4px;min-height:44px;-webkit-tap-highlight-color:transparent}
 .det-title{font-family:var(--serif);font-size:20px;font-weight:400;margin-top:4px}
@@ -110,7 +110,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--sans);font-size:14p
 .cal-td:nth-child(7n){border-right:none}
 .cal-td:nth-last-child(-n+7){border-bottom:none}
 .cal-td:active{background:var(--accent-lt)}
-.cal-td.empty{cursor:default;background:#ECEAE4;pointer-events:none}
+.cal-td.empty{cursor:default;background:var(--surface2);pointer-events:none}
 .cal-td.today-cell{background:var(--surface)}
 .cal-td.selected-cell{background:var(--accent-lt)}
 .cal-num{font-size:11px;font-weight:400;color:var(--text2);line-height:1;display:flex;align-items:center;justify-content:center;width:24px;height:24px;flex-shrink:0}
@@ -187,10 +187,10 @@ select.inp{cursor:pointer;appearance:auto;height:44px}
   box-shadow:0 2px 6px rgba(0,0,0,.08);
 }
 .swipe-btn:active{opacity:.8;transform:scale(.95)}
-.swipe-btn.sb-archive{background:var(--yellow-bg);color:var(--yellow);border:1.5px solid #EDD9A0}
-.swipe-btn.sb-delete{background:var(--red-bg);color:var(--red);border:1.5px solid #F5CECA}
+.swipe-btn.sb-archive{background:var(--yellow-bg);color:var(--yellow);border:1.5px solid var(--yellow-border)}
+.swipe-btn.sb-delete{background:var(--red-bg);color:var(--red);border:1.5px solid var(--red-border)}
 .swipe-btn-icon{font-size:17px;line-height:1}
-.del-confirm{padding:10px 14px;background:var(--red-bg);border:1px solid #F5CECA;border-top:none;border-radius:0 0 var(--r) var(--r)}
+.del-confirm{padding:10px 14px;background:var(--red-bg);border:1px solid var(--red-border);border-top:none;border-radius:0 0 var(--r) var(--r)}
 /* Log pick modal */
 .plan-pick-row{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--border);cursor:pointer}
 .plan-pick-row:last-child{border-bottom:none}
@@ -914,7 +914,7 @@ function EditCasePage({ case_:c, methods, levels, onBack, onSave, onDelete }){
         <input className="inp" placeholder="簡短備忘…" value={note} onChange={e=>setNote(e.target.value)} maxLength={60}/>
         <TrackingPlanEditor plans={trackingPlans} setPlans={setPlans} methods={safe} defaultFreq={freqKeyFromDays(levels[level]?.days)}/>
         {confirmDel?(
-          <div style={{background:"var(--red-bg)",border:"1px solid #EDCFCC",borderRadius:10,padding:"12px 14px",marginBottom:14}}>
+          <div style={{background:"var(--red-bg)",border:"1px solid var(--red-border)",borderRadius:10,padding:"12px 14px",marginBottom:14}}>
             <div style={{fontSize:13,color:"var(--red)",fontWeight:500,marginBottom:6}}>確認刪除「{c.nick}」？</div>
             <div style={{fontSize:12,color:"var(--muted)",marginBottom:10,lineHeight:1.6}}>此操作無法復原。若暫時不需聯絡，建議改用「封存個案」。</div>
             <div style={{display:"flex",gap:8}}>
@@ -1235,7 +1235,7 @@ function CasesScreen({ cases, methods, levels, onAdd, onOpen, updateCase, delete
                 <div style={{fontSize:11,color:"var(--muted)",lineHeight:1.6,marginBottom:8}}>此操作無法復原。若暫時不需聯絡，建議改用「封存個案」。</div>
                 <div style={{display:"flex",gap:6}}>
                   <button className="act-btn" style={{flex:1,fontSize:12}} onClick={()=>setDelConfId(null)}>取消</button>
-                  <button className="act-btn" style={{flex:1,fontSize:12,color:"var(--yellow)",borderColor:"#EDD9A0",background:"var(--yellow-bg)"}}
+                  <button className="act-btn" style={{flex:1,fontSize:12,color:"var(--yellow)",borderColor:"var(--yellow-border)",background:"var(--yellow-bg)"}}
                     onClick={()=>{updateCase(c.id,()=>({archived:true,archivedAt:new Date().toISOString()}));showToast("已封存個案");setDelConfId(null);}}>改為封存</button>
                   <button className="act-btn danger" style={{flex:1,fontSize:12}} onClick={()=>{deleteCase(c.id);setDelConfId(null);}}>確認刪除</button>
                 </div>
@@ -2171,7 +2171,7 @@ function ArchivedPage({ cases, updateCase, deleteCase, onBack, showToast }){
             </div>
           </div>
           {restoreId===c.id&&(
-            <div style={{margin:"-8px 22px 10px",background:"var(--green-bg)",border:"1px solid #A8D8BC",borderRadius:"0 0 var(--r) var(--r)",padding:"12px 14px"}}>
+            <div style={{margin:"-8px 22px 10px",background:"var(--green-bg)",border:"1px solid var(--green-border)",borderRadius:"0 0 var(--r) var(--r)",padding:"12px 14px"}}>
               <div style={{fontSize:13,fontWeight:500,marginBottom:4}}>恢復「{c.nick}」？</div>
               <div style={{fontSize:12,color:"var(--muted)",lineHeight:1.6,marginBottom:10}}>恢復後將重新出現在個案管理，並恢復追蹤提醒。</div>
               <div style={{display:"flex",gap:6}}>
@@ -2181,7 +2181,7 @@ function ArchivedPage({ cases, updateCase, deleteCase, onBack, showToast }){
             </div>
           )}
           {deleteId===c.id&&(
-            <div style={{margin:"-8px 22px 10px",background:"var(--red-bg)",border:"1px solid #EDCFCC",borderRadius:"0 0 var(--r) var(--r)",padding:"12px 14px"}}>
+            <div style={{margin:"-8px 22px 10px",background:"var(--red-bg)",border:"1px solid var(--red-border)",borderRadius:"0 0 var(--r) var(--r)",padding:"12px 14px"}}>
               <div style={{fontSize:13,color:"var(--red)",fontWeight:500,marginBottom:4}}>永久刪除「{c.nick}」？</div>
               <div style={{fontSize:12,color:"var(--muted)",lineHeight:1.6,marginBottom:10}}>此操作無法復原，所有聯絡紀錄與追蹤計畫將一併刪除。</div>
               <div style={{display:"flex",gap:6}}>
@@ -2278,7 +2278,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.60</span>
+          <span className="s-val">v15.61</span>
         </div>
       </div>
     </div>
