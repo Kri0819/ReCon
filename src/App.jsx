@@ -602,12 +602,12 @@ function OB_Illus5(){ // 完成
 const ONBOARDING_SLIDES = [
   { illus: OB_IllusLogo, title: "歡迎使用 ReCon｜再聯絡",
     body: "專為社工／個案管理者設計的聯絡追蹤工具，幫你記住每一位個案下次該什麼時候聯繫、用什麼方式聯繫。" },
+  { illus: OB_Illus4, title: "⚠ 資料安全性提醒", danger:true,
+    body: "本產品所有資料僅儲存在「這台裝置的這個瀏覽器」裡，不連結雲端，也不會自動備份。換裝置、換瀏覽器、清除瀏覽器資料都可能導致資料遺失。\n\n請勿過度依賴本產品作為唯一的紀錄來源：建議定期於「設定 › 資料匯出中心」匯出備份，並盡快將個案紀錄歸檔到機構的正式系統。" },
   { illus: OB_Illus2, title: "個案與追蹤計畫",
     body: "為每位個案設定關懷等級與追蹤計畫（例如每週電話一次），系統會自動幫你算出下次該聯繫的日期，並在到期時提醒你。" },
   { illus: OB_Illus3, title: "今日待辦與行事曆",
     body: "「今日」頁面彙整當天需要聯絡的個案；「行事曆」則能一次檢視整月的排程，掌握每天的工作量。" },
-  { illus: OB_Illus4, title: "⚠ 資料安全性提醒", danger:true,
-    body: "本產品所有資料僅儲存在「這台裝置的這個瀏覽器」裡，不連結雲端，也不會自動備份。換裝置、換瀏覽器、清除瀏覽器資料都可能導致資料遺失。\n\n請勿過度依賴本產品作為唯一的紀錄來源：建議定期於「設定 › 資料匯出中心」匯出備份，並盡快將個案紀錄歸檔到機構的正式系統。" },
   { illus: OB_Illus5, title: "準備好了",
     body: "現在就開始新增你的第一個個案吧！之後隨時可以在「設定」頁重新觀看這份教學。" },
 ];
@@ -630,6 +630,8 @@ function OnboardingBody({ step, setStep, total, theme }){
 }
 
 // 首次啟動：中央卡片彈窗
+// 刻意不提供「跳過」按鈕——資料安全性提醒（第2張）必須讓使用者完整看過一輪才能進入 App，
+// 避免有人習慣性連續點跳過而錯過這則重要提醒。
 function OnboardingModal({ onFinish, theme }){
   const [step,setStep]=useState(0);
   const last = step===ONBOARDING_SLIDES.length-1;
@@ -638,9 +640,7 @@ function OnboardingModal({ onFinish, theme }){
       <div className="sheet center" style={{maxWidth:340}}>
         <OnboardingBody step={step} setStep={setStep} total={ONBOARDING_SLIDES.length} theme={theme}/>
         <div className="btn-row">
-          {!last
-            ? <button className="act-btn" onClick={onFinish}>跳過</button>
-            : <button className="act-btn" onClick={()=>setStep(s=>s-1)}>上一步</button>}
+          {step>0&&<button className="act-btn" onClick={()=>setStep(s=>s-1)}>上一步</button>}
           <button className="act-btn primary" style={{flex:1}} onClick={()=>last?onFinish():setStep(s=>s+1)}>{last?"開始使用":"下一步"}</button>
         </div>
       </div>
@@ -2278,7 +2278,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.58</span>
+          <span className="s-val">v15.60</span>
         </div>
       </div>
     </div>
