@@ -14,6 +14,7 @@ const css = `
   --yellow:#B8860B;--yellow-bg:#FDF8EC;--yellow-border:#EDD9A0;
   --green:#2D6A4F;--green-bg:#EDF5F1;--green-border:#A8D8BC;
   --accent:#2C4A7C;--accent-lt:#EBF0F9;--accent-mid:#4A6FA0;
+  --cal-line:#B7B2A6;
   --serif:'Noto Serif TC',serif;--sans:'Inter',system-ui,sans-serif;--r:12px;
 }
 [data-theme="dark"]{
@@ -24,6 +25,7 @@ const css = `
   --yellow:#F0B840;--yellow-bg:#2A2008;--yellow-border:#4A3C18;
   --green:#5FC088;--green-bg:#0F241A;--green-border:#254A38;
   --accent:#7FB0E8;--accent-lt:#1E3248;--accent-mid:#6FA0D8;
+  --cal-line:#5A6C82;
 }
 html,body{height:100%;background:var(--bg);font-family:var(--sans);font-size:14px;line-height:1.55;color:var(--text);-webkit-font-smoothing:antialiased}
 html,body{background:var(--bg);height:100%}
@@ -103,10 +105,10 @@ html,body{background:var(--bg);height:100%}
 .kebab-menu-item:active{background:var(--surface2)}
 .kebab-menu-item.danger{color:var(--red)}
 /* Calendar */
-.cal-wrap{margin:0 18px;border:1px solid var(--border2);border-radius:var(--r);overflow:hidden;background:var(--surface)}
-.cal-head{display:flex;border-bottom:1px solid var(--border2)}
+.cal-wrap{margin:0 18px;border:1.5px solid var(--cal-line);border-radius:var(--r);overflow:hidden;background:var(--surface)}
+.cal-head{display:flex;border-bottom:1.5px solid var(--cal-line)}
 .cal-th{flex:1;text-align:center;font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px 0 7px}
-.cal-body{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--border2)}
+.cal-body{display:grid;grid-template-columns:repeat(7,1fr);gap:1.5px;background:var(--cal-line)}
 .cal-td{overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;background:var(--surface);box-sizing:border-box;transition:background .1s;flex-shrink:0}
 .cal-td:active{background:var(--accent-lt)}
 .cal-td.empty{cursor:default;pointer-events:none}
@@ -2277,7 +2279,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.66</span>
+          <span className="s-val">v15.67</span>
         </div>
       </div>
     </div>
