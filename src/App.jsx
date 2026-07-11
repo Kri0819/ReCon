@@ -106,10 +106,8 @@ html,body{background:var(--bg);height:100%}
 .cal-wrap{margin:0 18px;border:1px solid var(--border2);border-radius:var(--r);overflow:hidden;background:var(--surface)}
 .cal-head{display:flex;border-bottom:1px solid var(--border2)}
 .cal-th{flex:1;text-align:center;font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px 0 7px}
-.cal-body{display:grid;grid-template-columns:repeat(7,1fr)}
-.cal-td{overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-right:1px solid var(--border2);border-bottom:1px solid var(--border2);cursor:pointer;background:var(--surface);box-sizing:border-box;transition:background .1s;flex-shrink:0}
-.cal-td:nth-child(7n){border-right:none}
-.cal-td:nth-last-child(-n+7){border-bottom:none}
+.cal-body{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--border2)}
+.cal-td{overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;background:var(--surface);box-sizing:border-box;transition:background .1s;flex-shrink:0}
 .cal-td:active{background:var(--accent-lt)}
 .cal-td.empty{cursor:default;pointer-events:none}
 .cal-td.today-cell{background:var(--surface)}
@@ -1738,13 +1736,13 @@ function CalendarScreen({ cases, onOpen }){
       </div>
       <div className="cal-wrap" ref={wrapRef} style={{"--csz":"44px"}}>
         <div className="cal-head">{DOW_NAMES.map(d=><div key={d} className="cal-th">{d}</div>)}</div>
-        <div className="cal-body" style={{gridTemplateRows:`repeat(${cells.length/7},var(--csz,44px))`,height:`calc(var(--csz,44px)*${cells.length/7})`}}>
+        <div className="cal-body" style={{gridTemplateRows:`repeat(${cells.length/7},var(--csz,44px))`}}>
           {cells.map((d,i)=>{
-            if(d===null) return <div key={i} className="cal-td empty" style={{width:"var(--csz,44px)",height:"var(--csz,44px)"}}/>;
+            if(d===null) return <div key={i} className="cal-td empty"/>;
             const ds=ymd(year,month,d), evts=eventMap[ds]||[];
             const cls=["cal-td",ds===TODAY?"today-cell":"",ds===sel&&ds!==TODAY?"selected-cell":""].filter(Boolean).join(" ");
             return (
-              <div key={ds} className={cls} style={{width:"var(--csz,44px)",height:"var(--csz,44px)"}} onClick={()=>setSel(ds)}>
+              <div key={ds} className={cls} onClick={()=>setSel(ds)}>
                 <div className="cal-num">{d}</div>
                 {evts.length>0&&<div className="cal-dots">{evts.slice(0,3).map((e,j)=><div key={j} className="cal-dot" style={{background:"var(--accent)"}}/>)}</div>}
               </div>
@@ -2279,7 +2277,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.65</span>
+          <span className="s-val">v15.66</span>
         </div>
       </div>
     </div>
