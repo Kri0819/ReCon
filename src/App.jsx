@@ -103,15 +103,15 @@ html,body{background:var(--bg);height:100%}
 .kebab-menu-item:active{background:var(--surface2)}
 .kebab-menu-item.danger{color:var(--red)}
 /* Calendar */
-.cal-wrap{margin:0 18px;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;background:var(--surface)}
-.cal-head{display:flex;border-bottom:1px solid var(--border)}
+.cal-wrap{margin:0 18px;border:1px solid var(--border2);border-radius:var(--r);overflow:hidden;background:var(--surface)}
+.cal-head{display:flex;border-bottom:1px solid var(--border2)}
 .cal-th{flex:1;text-align:center;font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px 0 7px}
 .cal-body{display:grid;grid-template-columns:repeat(7,1fr)}
-.cal-td{overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);cursor:pointer;background:var(--surface);box-sizing:border-box;transition:background .1s;flex-shrink:0}
+.cal-td{overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-right:1px solid var(--border2);border-bottom:1px solid var(--border2);cursor:pointer;background:var(--surface);box-sizing:border-box;transition:background .1s;flex-shrink:0}
 .cal-td:nth-child(7n){border-right:none}
 .cal-td:nth-last-child(-n+7){border-bottom:none}
 .cal-td:active{background:var(--accent-lt)}
-.cal-td.empty{cursor:default;background:var(--surface2);pointer-events:none}
+.cal-td.empty{cursor:default;background:var(--surface);opacity:.4;pointer-events:none}
 .cal-td.today-cell{background:var(--surface)}
 .cal-td.selected-cell{background:var(--accent-lt)}
 .cal-num{font-size:11px;font-weight:400;color:var(--text2);line-height:1;display:flex;align-items:center;justify-content:center;width:24px;height:24px;flex-shrink:0}
@@ -2279,7 +2279,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.63</span>
+          <span className="s-val">v15.64</span>
         </div>
       </div>
     </div>
