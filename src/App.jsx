@@ -111,7 +111,7 @@ html,body{background:var(--bg);height:100%}
 .cal-td:nth-child(7n){border-right:none}
 .cal-td:nth-last-child(-n+7){border-bottom:none}
 .cal-td:active{background:var(--accent-lt)}
-.cal-td.empty{cursor:default;background:var(--surface);opacity:.4;pointer-events:none}
+.cal-td.empty{cursor:default;pointer-events:none}
 .cal-td.today-cell{background:var(--surface)}
 .cal-td.selected-cell{background:var(--accent-lt)}
 .cal-num{font-size:11px;font-weight:400;color:var(--text2);line-height:1;display:flex;align-items:center;justify-content:center;width:24px;height:24px;flex-shrink:0}
@@ -2279,7 +2279,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.64</span>
+          <span className="s-val">v15.65</span>
         </div>
       </div>
     </div>
