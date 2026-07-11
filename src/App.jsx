@@ -26,6 +26,7 @@ const css = `
   --accent:#7FB0E8;--accent-lt:#1E3248;--accent-mid:#6FA0D8;
 }
 html,body{height:100%;background:var(--bg);font-family:var(--sans);font-size:14px;line-height:1.55;color:var(--text);-webkit-font-smoothing:antialiased}
+html,body{background:var(--bg);height:100%}
 .shell{width:100%;height:100dvh;max-width:430px;margin:0 auto;background:var(--bg);color:var(--text);display:flex;flex-direction:column;position:relative;overflow:hidden}
 .screen{flex:1;overflow-y:auto;overflow-x:hidden}
 .screen::-webkit-scrollbar{display:none}
@@ -2278,7 +2279,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.61</span>
+          <span className="s-val">v15.62</span>
         </div>
       </div>
     </div>
@@ -2346,6 +2347,16 @@ export default function App(){
   useEffect(()=>{ lsSet(LS.methods, methods); },[methods]);
   useEffect(()=>{ lsSet(LS.levels,  levels);  },[levels]);
   useEffect(()=>{ document.title="ReCon｜再聯絡"; },[]);
+  useEffect(()=>{
+    // 把 data-theme 同步到 <html>，並直接設定 body 背景色；
+    // 這樣 iOS Safari 的橡皮筋回彈捲動、或安全區域露出的縫隙，看到的都會是主題色而不是瀏覽器預設白底。
+    document.documentElement.dataset.theme = theme;
+    const bg = theme==="dark" ? "#0F1520" : "#F8F7F4";
+    document.documentElement.style.background = bg;
+    document.body.style.background = bg;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if(meta) meta.setAttribute("content", theme==="dark" ? "#0F1520" : "#2F4E6E");
+  },[theme]);
 
   function updateCase(id, patchFn){
     setCases(prev=>{
