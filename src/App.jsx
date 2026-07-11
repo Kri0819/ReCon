@@ -34,8 +34,8 @@ html,body{background:var(--bg);height:100%}
 .tab-shell{height:100%;display:flex;flex-direction:column}
 .tab-scroll{flex:1;overflow-y:auto}
 .bnav{display:flex;background:var(--surface);border-top:1px solid var(--border);padding:10px 0 calc(env(safe-area-inset-bottom,0px) + 14px);flex-shrink:0;backdrop-filter:blur(12px);opacity:.97}
-.bnav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;border:none;background:none;cursor:pointer;padding:4px 0;font-family:var(--sans)}
-.bnav-icon{font-size:19px;opacity:.3;transition:opacity .12s}
+.bnav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;border:none;background:none;cursor:pointer;padding:4px 0;font-family:var(--sans);color:var(--text)}
+.bnav-icon{font-size:19px;opacity:.3;transition:opacity .12s;color:inherit}
 .bnav-label{font-size:10px;letter-spacing:.04em;color:var(--muted);font-weight:500}
 .bnav-btn.active .bnav-icon{opacity:1}
 .bnav-btn.active .bnav-label{color:var(--accent);font-weight:600}
@@ -2279,7 +2279,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.62</span>
+          <span className="s-val">v15.63</span>
         </div>
       </div>
     </div>
