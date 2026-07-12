@@ -105,11 +105,13 @@ html,body{background:var(--bg);height:100%}
 .kebab-menu-item:active{background:var(--surface2)}
 .kebab-menu-item.danger{color:var(--red)}
 /* Calendar */
-.cal-wrap{margin:0 18px;border:1.5px solid var(--cal-line);border-radius:var(--r);overflow:hidden;background:var(--surface)}
-.cal-head{display:flex;border-bottom:1.5px solid var(--cal-line)}
+.cal-wrap{margin:0 18px;border:1px solid var(--cal-line);border-radius:var(--r);overflow:hidden;background:var(--surface)}
+.cal-head{display:flex;border-bottom:1px solid var(--cal-line)}
 .cal-th{flex:1;text-align:center;font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px 0 7px}
 .cal-body{display:grid;grid-template-columns:repeat(7,1fr)}
-.cal-td{overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;background:var(--surface);box-sizing:border-box;transition:background .1s;flex-shrink:0;border:1px solid var(--cal-line)}
+.cal-td{overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;background:var(--surface);box-sizing:border-box;transition:background .1s;flex-shrink:0;border-right:1px solid var(--cal-line);border-bottom:1px solid var(--cal-line)}
+.cal-td:nth-child(7n){border-right:none}
+.cal-td:nth-last-child(-n+7){border-bottom:none}
 .cal-td:active{background:var(--accent-lt)}
 .cal-td.empty{cursor:default;pointer-events:none}
 .cal-td.today-cell{background:var(--surface)}
@@ -2279,7 +2281,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.68</span>
+          <span className="s-val">v15.69</span>
         </div>
       </div>
     </div>
