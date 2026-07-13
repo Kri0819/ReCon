@@ -117,8 +117,9 @@ html,body{background:var(--bg);height:100%}
 .cal-td{overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;background:transparent;box-sizing:border-box;transition:background .1s;flex-shrink:0}
 .cal-td:active{background:var(--accent-lt)}
 .cal-td.empty{cursor:default;pointer-events:none}
-.cal-td.today-cell{background:var(--surface)}
-.cal-td.selected-cell{background:var(--accent-lt)}
+.cal-td.selected-cell{position:relative}
+.cal-td.selected-cell::before{content:"";position:absolute;inset:2px;background:var(--accent-lt);border-radius:6px;z-index:0}
+.cal-td.selected-cell .cal-num,.cal-td.selected-cell .cal-dots{position:relative;z-index:1}
 .cal-num{font-size:11px;font-weight:400;color:var(--text2);line-height:1;display:flex;align-items:center;justify-content:center;width:24px;height:24px;flex-shrink:0}
 .cal-td.today-cell .cal-num{background:var(--accent);color:#fff;border-radius:50%;font-weight:700;font-size:11px}
 .cal-dots{display:flex;gap:2px;justify-content:center;overflow:hidden;flex-shrink:0}
@@ -2284,7 +2285,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.71</span>
+          <span className="s-val">v15.72</span>
         </div>
       </div>
     </div>
