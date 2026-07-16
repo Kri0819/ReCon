@@ -258,10 +258,150 @@ const INITIAL_LEVELS = {
 // Frequency definitions
 const FREQ_OPTIONS = [
   {key:"weekly",    label:"每週",   days:7  },
-  {key:"biweekly",  label:"每兩週", days:14 },
+  {key:"biweekly",  label:"每兩週", days:14 }, // 僅供舊資料 migration 對照，v16.0 起不再作為可選項
   {key:"monthly",   label:"每月",   days:30 },
   {key:"quarterly", label:"每季",   days:90 },
 ];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// v16.0 追蹤目標規則（取代舊有「頻率」單選）
+// ─────────────────────────────────────────────────────────────────────────────
+
+// 使用者可選的追蹤目標（新增/編輯追蹤任務時使用）
+const TARGET_OPTIONS = [
+  {key:"weekly1",    targetType:"weekly",    timesPerPeriod:1, label:"每週 1 次"},
+  {key:"monthly1",   targetType:"monthly",   timesPerPeriod:1, label:"每月 1 次"},
+  {key:"monthly2",   targetType:"monthly",   timesPerPeriod:2, label:"每月 2 次"},
+  {key:"monthly3",   targetType:"monthly",   timesPerPeriod:3, label:"每月 3 次"},
+  {key:"monthly4",   targetType:"monthly",   timesPerPeriod:4, label:"每月 4 次"},
+  {key:"quarterly1", targetType:"quarterly", timesPerPeriod:1, label:"每季 1 次"},
+  {key:"interval",   targetType:"interval",  timesPerPeriod:1, label:"自訂間隔"},
+];
+function targetOptionKey(p){
+  if(p.targetType==="monthly") return `monthly${p.timesPerPeriod||1}`;
+  if(p.targetType==="quarterly") return "quarterly1";
+  if(p.targetType==="interval") return "interval";
+  return "weekly1";
+}
+
+// 每月多次時，「安排方式」的預設週次組合
+const MONTHLY_SCHEDULE_PRESETS = {
+  2: [ {key:"w13",  label:"第 1、3 週",   weeks:[1,3]},
+       {key:"w24",  label:"第 2、4 週",   weeks:[2,4]} ],
+  3: [ {key:"w124", label:"第 1、2、4 週", weeks:[1,2,4]},
+       {key:"w134", label:"第 1、3、4 週", weeks:[1,3,4]} ],
+  4: [ {key:"wall",  label:"每週一次",     weeks:[1,2,3,4]} ],
+};
+
+// 週次（第幾週）以「每月第 N 個 7 天區塊」定義：1-7 日為第1週、8-14 日為第2週...以此類推，
+// 這是明確、可預測、不受星期幾影響的規則。
+function weekOfMonthRange(y, m, weekNum){ // m: 0-indexed月份；回傳 [startDateStr,endDateStr]，若該週不存在回傳 null
+  const totalDays = new Date(y, m+1, 0).getDate();
+  const start = (weekNum-1)*7 + 1;
+  if(start>totalDays) return null;
+  const end = Math.min(weekNum*7, totalDays);
+  return [ymd(y,m,start), ymd(y,m,end)];
+}
+function weeksExistInMonth(y,m){ // 該月總共有幾個週次區塊（通常4或5）
+  const totalDays = new Date(y, m+1, 0).getDate();
+  return Math.ceil(totalDays/7);
+}
+
+// 讀取／編輯追蹤計畫時，把任何舊格式（freq: weekly/biweekly/monthly/quarterly）轉換為新結構。
+// 絕對不刪除舊欄位，只新增欄位，確保舊資料不會遺失。
+function migratePlan(plan){
+  if(!plan) return plan;
+  if(plan.targetType) return plan; // 已是新格式
+  let targetType="monthly", timesPerPeriod=plan.timesPerPeriod||1, scheduleMode="flexible", targetWeeks=[];
+  switch(plan.freq){
+    case "weekly":    targetType="weekly";    timesPerPeriod=1; break;
+    case "quarterly": targetType="quarterly"; timesPerPeriod=1; break;
+    case "biweekly":  targetType="monthly";   timesPerPeriod=2; scheduleMode="flexible"; targetWeeks=[]; break;
+    case "monthly":   targetType="monthly";   timesPerPeriod=plan.timesPerPeriod||1; scheduleMode="flexible"; targetWeeks=[]; break;
+    default:          targetType="monthly";   timesPerPeriod=plan.timesPerPeriod||1; scheduleMode="flexible"; targetWeeks=[];
+  }
+  return {...plan, targetType, timesPerPeriod, scheduleMode, targetWeeks, intervalDays:plan.intervalDays??null};
+}
+function migratePlans(plans){ return (plans||[]).map(migratePlan); }
+function migrateCases(cases){ return (cases||[]).map(c=>({...c, trackingPlans: migratePlans(c.trackingPlans)})); }
+
+// 依等級設定的「間隔天數」，推算最接近的預設追蹤目標（新增個案時自動帶入用）
+function defaultTargetFromDays(days){
+  const n=Number(days)||7;
+  if(n<=10)  return {targetType:"weekly",    timesPerPeriod:1, scheduleMode:"flexible", targetWeeks:[], intervalDays:null};
+  if(n<=20)  return {targetType:"monthly",   timesPerPeriod:2, scheduleMode:"flexible", targetWeeks:[], intervalDays:null};
+  if(n<=45)  return {targetType:"monthly",   timesPerPeriod:1, scheduleMode:"flexible", targetWeeks:[], intervalDays:null};
+  if(n<=120) return {targetType:"quarterly", timesPerPeriod:1, scheduleMode:"flexible", targetWeeks:[], intervalDays:null};
+  return       {targetType:"interval",  timesPerPeriod:1, scheduleMode:"flexible", targetWeeks:[], intervalDays:n};
+}
+
+// 顯示文案：目標類型＋次數，例如「每月 2 次」「每週 1 次」「每 60 天」
+function planTargetLabel(p){
+  if(p.targetType==="weekly") return "每週 1 次";
+  if(p.targetType==="quarterly") return "每季 1 次";
+  if(p.targetType==="interval") return `每 ${p.intervalDays||30} 天`;
+  return `每月 ${p.timesPerPeriod||1} 次`;
+}
+// 顯示文案：安排方式子標籤，例如「第 1、3 週」「不固定」；週次1次或非月類型則不顯示
+function planScheduleLabel(p){
+  if(p.targetType!=="monthly" || (p.timesPerPeriod||1)<=1) return "";
+  if(p.scheduleMode==="fixedWeeks" && (p.targetWeeks||[]).length>0){
+    return `第 ${[...p.targetWeeks].sort((a,b)=>a-b).join("、")} 週`;
+  }
+  return "不固定";
+}
+// 給舊版元件相容用（例如個案列表小標籤），只需要 weekly/monthly/quarterly 三選一
+function legacyFreqLabel(p){
+  if(p.targetType==="weekly") return "weekly";
+  if(p.targetType==="quarterly") return "quarterly";
+  return "monthly";
+}
+
+// 固定週次模式：計算本月已完成幾個「目標週」、目標共幾個週（只計入本月實際存在的週次）
+function countFixedWeeksDone(plan, logs){
+  const now=new Date(TODAY); const y=now.getFullYear(), m=now.getMonth();
+  const maxWeek=weeksExistInMonth(y,m);
+  const weeksThisMonth=(plan.targetWeeks||[]).filter(w=>w<=maxWeek);
+  let done=0;
+  for(const w of weeksThisMonth){
+    const range=weekOfMonthRange(y,m,w); if(!range) continue;
+    const [ws,we]=range;
+    if((logs||[]).some(l=>l.date>=ws&&l.date<=we&&(l.planId===plan.id||l.method===plan.method))) done++;
+  }
+  return {done, goal:weeksThisMonth.length};
+}
+// 固定週次模式：找出下一個尚未完成的目標週起始日（最多往後找 24 個月，避免無限迴圈）
+function nextDueFixedWeeks(plan, logs, fromDate){
+  const base=fromDate||TODAY;
+  let y=new Date(base).getFullYear(), m=new Date(base).getMonth();
+  for(let guard=0; guard<24; guard++){
+    const maxWeek=weeksExistInMonth(y,m);
+    const weeksThisMonth=(plan.targetWeeks||[]).filter(w=>w<=maxWeek).sort((a,b)=>a-b);
+    for(const w of weeksThisMonth){
+      const range=weekOfMonthRange(y,m,w); if(!range) continue;
+      const [ws,we]=range;
+      const done=(logs||[]).some(l=>l.date>=ws&&l.date<=we&&(l.planId===plan.id||l.method===plan.method));
+      if(!done) return ws;
+    }
+    m+=1; if(m>11){m=0;y+=1;}
+  }
+  return null;
+}
+// 統一的「本期完成數／目標數」計算，涵蓋所有 targetType
+function countPlanCompletion(plan, logs){
+  logs = logs||[];
+  if(plan.targetType==="interval"){
+    const done = (plan.nextDue && plan.nextDue>TODAY) ? 1 : 0;
+    return {done, goal:1};
+  }
+  if(plan.targetType==="monthly" && plan.scheduleMode==="fixedWeeks" && (plan.targetWeeks||[]).length>0){
+    return countFixedWeeksDone(plan, logs);
+  }
+  const key = plan.targetType==="weekly" ? "weekly" : plan.targetType==="quarterly" ? "quarterly" : "monthly";
+  const s=getPeriodStart(key), e=getPeriodEnd(key);
+  const done = logs.filter(l=>l.date>=s&&l.date<=e&&(l.planId===plan.id||l.method===plan.method)).length;
+  return {done, goal:plan.timesPerPeriod||1};
+}
 
 const DOW_NAMES = ["日","一","二","三","四","五","六"];
 const MONTH_NAMES = ["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"];
@@ -358,39 +498,36 @@ function daysBetween(a,b){ if(!a||!b)return 0; const ms=new Date(b)-new Date(a);
 function getMonthDays(y,m){ return{first:new Date(y,m,1).getDay(),total:new Date(y,m+1,0).getDate()}; }
 function ymd(y,m,d){ return `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`; }
 
-// Calculate next due date for a tracking plan after a completion date
-function calcPlanNextDue(plan, fromDate) {
+// Calculate next due date for a tracking plan after a completion date (v16.0: targetType-based)
+function calcPlanNextDue(planRaw, fromDate, logs) {
+  const plan = migratePlan(planRaw); // 防禦性 migration：即使呼叫端傳入舊格式也能正確運算
   const base = new Date(fromDate || TODAY);
-  const {freq, anchorDay} = plan;
+  const baseStr = dateStr(base);
 
-  // 核心邏輯：下次到期日 = 下一個「週期範圍」的起始日
-  // 而不是「完成日 + 固定天數」。這樣不管本週哪天完成，
-  // 下次提醒都對齊到下週日（或下個月1日等），週期範圍本身不會漂移。
-
-  if(freq==="weekly"){
-    // 本週期起始日 + 7 天 = 下週期起始日
+  if(plan.targetType==="weekly"){
+    // 本週期起始日 + 7 天 = 下週期起始日；不因完成早晚而漂移
     const weekStart = getWeekStart(base);
     const nextWeekStart = new Date(weekStart); nextWeekStart.setDate(weekStart.getDate()+7);
     return dateStr(nextWeekStart);
   }
-  if(freq==="biweekly"){
-    const weekStart = getWeekStart(base);
-    const nextBiStart = new Date(weekStart); nextBiStart.setDate(weekStart.getDate()+14);
-    return dateStr(nextBiStart);
-  }
-  if(freq==="quarterly"){
+  if(plan.targetType==="quarterly"){
     const m=base.getMonth(); const q=Math.floor(m/3)*3;
     let nextQ=q+3, y=base.getFullYear();
     if(nextQ>11){nextQ=0;y+=1;}
     return `${y}-${String(nextQ+1).padStart(2,"0")}-01`;
   }
-  // monthly：對齊到下個月1日，若有固定日期(anchorDay)則用該日
+  if(plan.targetType==="interval"){
+    // 自訂間隔：唯一使用「完成日期＋設定天數」推算下次到期日的模式
+    const days = Number(plan.intervalDays)||30;
+    return addDays(baseStr, days);
+  }
+  // monthly
+  if(plan.scheduleMode==="fixedWeeks" && (plan.targetWeeks||[]).length>0){
+    return nextDueFixedWeeks(plan, logs, baseStr);
+  }
+  // monthly · 不固定：對齊到下個月1日
   let y=base.getFullYear(), m=base.getMonth()+1;
   m+=1; if(m>12){m=1;y+=1;}
-  if(anchorDay){
-    const last=new Date(y,m,0).getDate();
-    return `${y}-${String(m).padStart(2,"0")}-${String(Math.min(anchorDay,last)).padStart(2,"0")}`;
-  }
   return `${y}-${String(m).padStart(2,"0")}-01`;
 }
 
@@ -426,21 +563,21 @@ function getFutureBookings(plan){
 function periodLabel(freq){
   return {weekly:"本週", biweekly:"本兩週", monthly:"本月", quarterly:"本季"}[freq] || "本期";
 }
+// 舊版逐字比對用的計數函式，v16.0 起 getTrackStatus 已改用 countPlanCompletion，此函式僅保留避免遺留呼叫出錯
 function countPlanLogs(logs, plan){
-  const s=getPeriodStart(plan.freq), e=getPeriodEnd(plan.freq);
+  const key = plan.targetType==="weekly"?"weekly":plan.targetType==="quarterly"?"quarterly":(plan.freq||"monthly");
+  const s=getPeriodStart(key), e=getPeriodEnd(key);
   return (logs||[]).filter(l=>l.date>=s&&l.date<=e&&(l.planId===plan.id||l.method===plan.method)).length;
 }
 
-// Compute tracking status for a case
+// Compute tracking status for a case（v16.0：以新的追蹤目標規則計算完成數／目標數）
 function getTrackStatus(c){
-  const plans=c.trackingPlans||[];
+  const plans=migratePlans(c.trackingPlans);
   if(!plans.length) return null;
-  const results=plans.map(p=>({
-    ...p,
-    done:countPlanLogs(c.logs,p),
-    goal:p.timesPerPeriod||1,
-    isDue: p.nextDue && p.nextDue<=TODAY,
-  }));
+  const results=plans.map(p=>{
+    const {done,goal}=countPlanCompletion(p,c.logs);
+    return {...p, done, goal, freq:legacyFreqLabel(p), isDue: p.nextDue && p.nextDue<=TODAY};
+  });
   const allDone=results.every(r=>r.done>=r.goal);
   const anyDue=results.some(r=>r.isDue&&r.done<r.goal);
   return{results,allDone,anyDue};
@@ -694,24 +831,58 @@ function PlanChips({c}){
 // TRACKING PLAN EDITOR
 // ─────────────────────────────────────────────────────────────────────────────
 
-function TrackingPlanEditor({ plans, setPlans, methods, defaultFreq }){
+function TrackingPlanEditor({ plans, setPlans, methods, defaultTarget }){
   const safe = methods.length>0?methods:["電話"];
-  const initFreq = defaultFreq || "monthly";
+  const initTarget = defaultTarget || {targetType:"monthly",timesPerPeriod:1,scheduleMode:"flexible",targetWeeks:[],intervalDays:null};
+  const blankForm = (t)=>({method:safe[0], targetType:t.targetType, timesPerPeriod:t.timesPerPeriod,
+    scheduleMode:t.scheduleMode||"flexible", targetWeeks:t.targetWeeks||[], intervalDays:t.intervalDays??30});
   const [adding, setAdding] = useState(false);
-  const [form, setForm]     = useState({method:safe[0],freq:initFreq,anchorDay:null,anchorDow:null,timesPerPeriod:1});
+  const [form, setForm]     = useState(blankForm(initTarget));
+  const [customWeeksOpen, setCustomWeeksOpen] = useState(false);
 
   function add(){
     if(!form.method) return;
-    const nextDue = calcPlanNextDue({...form}, TODAY);
-    setPlans(prev=>[...prev,{...form, id:genPlanId(), nextDue}]);
+    const nextDue = calcPlanNextDue({...form}, TODAY, []);
+    setPlans(prev=>[...prev,{...form, id:genPlanId(), nextDue, bookings:[]}]);
     setAdding(false);
-    setForm({method:safe[0],freq:defaultFreq||"monthly",anchorDay:null,anchorDow:null,timesPerPeriod:1});
+    setCustomWeeksOpen(false);
+    setForm(blankForm(defaultTarget||initTarget));
   }
   function remove(id){ setPlans(prev=>prev.filter(p=>p.id!==id)); }
   function openAdd(){
-    setForm(f=>({...f,freq:defaultFreq||f.freq}));
+    setForm(blankForm(defaultTarget||initTarget));
+    setCustomWeeksOpen(false);
     setAdding(v=>!v);
   }
+  function pickTarget(opt){
+    setForm(f=>({...f, targetType:opt.targetType, timesPerPeriod:opt.timesPerPeriod,
+      scheduleMode:"flexible", targetWeeks:[]}));
+    setCustomWeeksOpen(false);
+  }
+  function pickPreset(weeks){
+    setForm(f=>({...f, scheduleMode:"fixedWeeks", targetWeeks:weeks}));
+    setCustomWeeksOpen(false);
+  }
+  function pickFlexible(){
+    setForm(f=>({...f, scheduleMode:"flexible", targetWeeks:[]}));
+    setCustomWeeksOpen(false);
+  }
+  function openCustomWeeks(){
+    setForm(f=>({...f, scheduleMode:"fixedWeeks"}));
+    setCustomWeeksOpen(true);
+  }
+  function toggleCustomWeek(w){
+    setForm(f=>{
+      const has=(f.targetWeeks||[]).includes(w);
+      const next=has?f.targetWeeks.filter(x=>x!==w):[...(f.targetWeeks||[]),w];
+      return {...f, targetWeeks:next.sort((a,b)=>a-b)};
+    });
+  }
+
+  const showScheduleSection = form.targetType==="monthly" && form.timesPerPeriod>=2;
+  const presets = MONTHLY_SCHEDULE_PRESETS[form.timesPerPeriod]||[];
+  const isPresetActive = (weeks)=> form.scheduleMode==="fixedWeeks" && !customWeeksOpen &&
+    form.targetWeeks.length===weeks.length && weeks.every(w=>form.targetWeeks.includes(w));
 
   return (
     <div style={{marginBottom:14}}>
@@ -726,6 +897,7 @@ function TrackingPlanEditor({ plans, setPlans, methods, defaultFreq }){
 
       {plans.map(p=>{
         const stale = !methods.includes(p.method);
+        const scheduleLbl = planScheduleLabel(p);
         return (
         <div key={p.id} className="task-item">
           <div style={{flex:1}}>
@@ -733,7 +905,7 @@ function TrackingPlanEditor({ plans, setPlans, methods, defaultFreq }){
             {stale
               ? <div style={{fontSize:11,color:"var(--red)",marginTop:1,fontWeight:600}}>⚠ 聯絡方式已停用</div>
               : <div style={{fontSize:11,color:"var(--muted)",marginTop:1}}>
-                  {FREQ_OPTIONS.find(f=>f.key===p.freq)?.label} · {p.timesPerPeriod}次
+                  {planTargetLabel(p)}{scheduleLbl?` · ${scheduleLbl}`:""}
                   {p.nextDue?` · 下次 ${p.nextDue.slice(5)}`:""}
                 </div>}
           </div>
@@ -748,24 +920,59 @@ function TrackingPlanEditor({ plans, setPlans, methods, defaultFreq }){
           <select className="inp" value={form.method} onChange={e=>setForm(f=>({...f,method:e.target.value}))} autoFocus>
             {safe.map(m=><option key={m} value={m}>{m}</option>)}
           </select>
-          <label className="inp-label">頻率</label>
-          <div className="opt-row">
-            {FREQ_OPTIONS.map(fo=>(
-              <div key={fo.key} className={`opt ${form.freq===fo.key?"active":""}`}
-                onClick={()=>setForm(f=>({...f,freq:fo.key,anchorDay:null,anchorDow:null}))}>
-                {fo.label}
+
+          <label className="inp-label">追蹤目標</label>
+          <div className="opt-row" style={{flexWrap:"wrap"}}>
+            {TARGET_OPTIONS.map(opt=>(
+              <div key={opt.key} className={`opt ${form.targetType===opt.targetType&&form.timesPerPeriod===opt.timesPerPeriod?"active":""}`}
+                style={{minWidth:78,flex:"0 0 auto"}}
+                onClick={()=>pickTarget(opt)}>
+                {opt.label}
               </div>
             ))}
           </div>
-          <label className="inp-label">目標次數（每期）</label>
-          <div className="opt-row">
-            {[1,2,3,4].map(n=>(
-              <div key={n} className={`opt ${form.timesPerPeriod===n?"active":""}`}
-                onClick={()=>setForm(f=>({...f,timesPerPeriod:n}))}>
-                {n}次
+
+          {showScheduleSection&&(
+            <>
+              <label className="inp-label">安排方式</label>
+              <div className="opt-row" style={{flexWrap:"wrap",marginBottom:customWeeksOpen?8:14}}>
+                {presets.map(ps=>(
+                  <div key={ps.key} className={`opt ${isPresetActive(ps.weeks)?"active":""}`}
+                    style={{minWidth:90,flex:"0 0 auto"}}
+                    onClick={()=>pickPreset(ps.weeks)}>
+                    {ps.label}
+                  </div>
+                ))}
+                <div className={`opt ${customWeeksOpen?"active":""}`} style={{minWidth:78,flex:"0 0 auto"}}
+                  onClick={openCustomWeeks}>自訂週次</div>
+                <div className={`opt ${form.scheduleMode==="flexible"?"active":""}`} style={{minWidth:78,flex:"0 0 auto"}}
+                  onClick={pickFlexible}>不固定，只計算本月完成次數</div>
               </div>
-            ))}
-          </div>
+              {customWeeksOpen&&(
+                <div style={{marginBottom:14}}>
+                  <div className="inp-hint" style={{marginTop:-4,marginBottom:8}}>選擇本月第幾週需要完成（可複選）</div>
+                  <div className="opt-row">
+                    {[1,2,3,4,5].map(w=>(
+                      <div key={w} className={`opt ${(form.targetWeeks||[]).includes(w)?"active":""}`}
+                        style={{minWidth:44,flex:"0 0 auto"}}
+                        onClick={()=>toggleCustomWeek(w)}>
+                        第{w}週
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {form.targetType==="interval"&&(
+            <>
+              <label className="inp-label">間隔天數</label>
+              <input className="inp" type="number" min={1} value={form.intervalDays}
+                onChange={e=>setForm(f=>({...f,intervalDays:Math.max(1,Number(e.target.value)||1)}))}/>
+            </>
+          )}
+
           <button className="act-btn primary" style={{width:"100%",marginTop:4}} onClick={add}>加入此任務</button>
         </div>
       )}
@@ -782,7 +989,7 @@ function LogModal({ case_:lockedCase, allCases, methods, onClose, onSave }){
   const [caseId, setCaseId] = useState(lockedCase?.id || "");
   const c = options.find(cc=>cc.id===caseId) || null;
   const safe = methods.length>0?methods:["電話"];
-  const plans = c?.trackingPlans||[];
+  const plans = migratePlans(c?.trackingPlans);
   const nowH = new Date();
   const defaultTime = `${String(nowH.getHours()).padStart(2,"0")}:${String(nowH.getMinutes()).padStart(2,"0")}`;
   // 初始值一致：若有追蹤任務，預設聯絡方式對應第一個任務的方式
@@ -849,7 +1056,7 @@ function LogModal({ case_:lockedCase, allCases, methods, onClose, onSave }){
                   onClick={()=>onPlanChange(p)}>
                   <div>
                     <div style={{fontSize:13,fontWeight:500}}>{p.method}</div>
-                    <div style={{fontSize:11,color:"var(--muted)"}}>{FREQ_OPTIONS.find(f=>f.key===p.freq)?.label}</div>
+                    <div style={{fontSize:11,color:"var(--muted)"}}>{planTargetLabel(p)}{planScheduleLabel(p)?` · ${planScheduleLabel(p)}`:""}</div>
                   </div>
                   <div style={{width:20,height:20,borderRadius:"50%",border:`2px solid ${planId===p.id?"var(--accent)":"var(--border)"}`,background:planId===p.id?"var(--accent)":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                     {planId===p.id&&<div style={{width:8,height:8,borderRadius:"50%",background:"#fff"}}/>}
@@ -886,7 +1093,7 @@ function EditCasePage({ case_:c, methods, levels, onBack, onSave, onDelete }){
   const [nick,          setNick]    = useState(c.nick);
   const [note,          setNote]    = useState(c.note||"");
   const [level,         setLevel]   = useState(c.level);
-  const [trackingPlans, setPlans]   = useState((c.trackingPlans||[]).map(p=>({...p})));
+  const [trackingPlans, setPlans]   = useState(migratePlans(c.trackingPlans).map(p=>({...p})));
   const [err,           setErr]     = useState("");
   const [confirmDel,    setConfDel] = useState(false);
 
@@ -919,7 +1126,7 @@ function EditCasePage({ case_:c, methods, levels, onBack, onSave, onDelete }){
         </div>
         <label className="inp-label">備註（選填）</label>
         <input className="inp" placeholder="簡短備忘…" value={note} onChange={e=>setNote(e.target.value)} maxLength={60}/>
-        <TrackingPlanEditor plans={trackingPlans} setPlans={setPlans} methods={safe} defaultFreq={freqKeyFromDays(levels[level]?.days)}/>
+        <TrackingPlanEditor plans={trackingPlans} setPlans={setPlans} methods={safe} defaultTarget={defaultTargetFromDays(levels[level]?.days)}/>
         {confirmDel?(
           <div style={{background:"var(--red-bg)",border:"1px solid var(--red-border)",borderRadius:10,padding:"12px 14px",marginBottom:14}}>
             <div style={{fontSize:13,color:"var(--red)",fontWeight:500,marginBottom:6}}>確認刪除「{c.nick}」？</div>
@@ -960,7 +1167,7 @@ function AddCasePage({ existingCases, levels, methods, onBack, onSave }){
       const raw=localStorage.getItem(LS_DPLANS);
       const d=raw?JSON.parse(raw):{};
       if(d[levelKey]&&d[levelKey].length>0)
-        setPlans(d[levelKey].map(p=>({...p,id:genPlanId(),nextDue:calcPlanNextDue(p,TODAY)})));
+        setPlans(migratePlans(d[levelKey]).map(p=>({...p,id:genPlanId(),nextDue:calcPlanNextDue(p,TODAY)})));
     }catch{}
   }
 
@@ -1000,7 +1207,7 @@ function AddCasePage({ existingCases, levels, methods, onBack, onSave }){
           {Object.entries(levels).map(([k,l])=><option key={k} value={k}>{l.label}</option>)}
         </select>
 
-        <TrackingPlanEditor plans={plans} setPlans={setPlans} methods={safe} defaultFreq={freqKeyFromDays(levels[level]?.days)}/>
+        <TrackingPlanEditor plans={plans} setPlans={setPlans} methods={safe} defaultTarget={defaultTargetFromDays(levels[level]?.days)}/>
 
         <label className="inp-label">備註（選填）</label>
         <input className="inp" placeholder="簡短備忘…" value={note} onChange={e=>setNote(e.target.value)} maxLength={60}/>
@@ -1047,7 +1254,7 @@ function HomeScreen({ cases, methods, levels, updateCase, showToast }){
       // Update nextDue for the matched plan (based on the recorded date, not necessarily today)
       const newPlans = (prev.trackingPlans||[]).map(p=>{
         if(p.id!==planId) return p;
-        return {...p, nextDue:calcPlanNextDue(p, logDate)};
+        return {...p, nextDue:calcPlanNextDue(p, logDate, newLogs)};
       });
       return {lastContact: logDate>prev.lastContact||!prev.lastContact ? logDate : prev.lastContact, trackingPlans:newPlans, logs:newLogs};
     });
@@ -1313,7 +1520,7 @@ function EditLogModal({ case_:c, log, methods, onClose, onSave }){
                 <div key={p.id} className="plan-pick-row" onClick={()=>onPlanChange(p)}>
                   <div>
                     <div style={{fontSize:13,fontWeight:500}}>{p.method}</div>
-                    <div style={{fontSize:11,color:"var(--muted)"}}>{FREQ_OPTIONS.find(f=>f.key===p.freq)?.label}</div>
+                    <div style={{fontSize:11,color:"var(--muted)"}}>{planTargetLabel(p)}{planScheduleLabel(p)?` · ${planScheduleLabel(p)}`:""}</div>
                   </div>
                   <div style={{width:20,height:20,borderRadius:"50%",border:`2px solid ${planId===p.id?"var(--accent)":"var(--border)"}`,background:planId===p.id?"var(--accent)":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                     {planId===p.id&&<div style={{width:8,height:8,borderRadius:"50%",background:"#fff"}}/>}
@@ -1359,11 +1566,11 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast,
     const logDate = date || TODAY;
     updateCase(id, prev=>{
       const newLog={date:logDate,time:time||"",method,note:note||"已聯絡",planId:planId||undefined};
+      const newLogs=[newLog,...(prev.logs||[])].sort((a,b)=>b.date.localeCompare(a.date)||(b.time||"").localeCompare(a.time||""));
       const newPlans=(prev.trackingPlans||[]).map(p=>{
         if(p.id!==planId) return p;
-        return {...p,nextDue:calcPlanNextDue(p,logDate)};
+        return {...p,nextDue:calcPlanNextDue(p,logDate,newLogs)};
       });
-      const newLogs=[newLog,...(prev.logs||[])].sort((a,b)=>b.date.localeCompare(a.date)||(b.time||"").localeCompare(a.time||""));
       return{lastContact: logDate>prev.lastContact||!prev.lastContact ? logDate : prev.lastContact, trackingPlans:newPlans, logs:newLogs};
     });
     showToast("已記錄");
@@ -1392,7 +1599,8 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast,
             <span>{ts.allDone?"✓ 本期追蹤計畫已完成":"本期追蹤進度"}</span>
             <span style={{fontSize:11,color:"var(--muted)",fontWeight:500}}>
               {(()=>{
-                // 若所有任務頻率相同，顯示共用區間；否則顯示第一個任務的區間
+                // 若所有任務頻率相同、且皆非自訂間隔／固定週次，顯示共用區間；否則不顯示，避免文案誤導
+                if(ts.results.some(r=>r.targetType==="interval"||(r.targetType==="monthly"&&r.scheduleMode==="fixedWeeks"))) return "";
                 const freqs=[...new Set(ts.results.map(r=>r.freq))];
                 const f=freqs.length===1?freqs[0]:ts.results[0]?.freq;
                 if(!f) return "";
@@ -1406,12 +1614,17 @@ function DetailScreen({ case_:c, methods, levels, onBack, updateCase, showToast,
                 <div style={{flex:1}}>
                   <div className="plan-name">{r.method}</div>
                   {methods.includes(r.method)
-                    ? <div className="plan-freq">{FREQ_OPTIONS.find(f=>f.key===r.freq)?.label}</div>
+                    ? <>
+                        <div className="plan-freq">{planTargetLabel(r)}</div>
+                        {planScheduleLabel(r)&&<div className="plan-freq" style={{marginTop:1}}>{planScheduleLabel(r)}</div>}
+                      </>
                     : <div className="plan-freq" style={{color:"var(--red)",fontWeight:600}}>⚠ 聯絡方式已停用，請更新追蹤任務</div>}
                 </div>
-                <div className={`plan-prog ${r.done>=r.goal?"done":"todo"}`}>
-                  {r.done}/{r.goal} {r.done>=r.goal?"✓":"⚠"}
-                </div>
+                {r.targetType!=="interval"&&(
+                  <div className={`plan-prog ${r.done>=r.goal?"done":"todo"}`}>
+                    {r.done}/{r.goal} {r.done>=r.goal?"✓":"⚠"}
+                  </div>
+                )}
               </div>
               {r.nextDue&&(
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
@@ -1625,7 +1838,7 @@ function BookingsModal({ case_:c, onClose, onAddNew, onEditBooking }){
                 onClick={()=>onEditBooking(b.plan,b)}>
                 <div>
                   <div style={{fontSize:13,fontWeight:500}}>{b.plan.method}</div>
-                  <div style={{fontSize:11,color:"var(--muted)"}}>{b.note?b.note:FREQ_OPTIONS.find(f=>f.key===b.plan.freq)?.label}</div>
+                  <div style={{fontSize:11,color:"var(--muted)"}}>{b.note?b.note:(()=>{const mp=migratePlan(b.plan);return `${planTargetLabel(mp)}${planScheduleLabel(mp)?" · "+planScheduleLabel(mp):""}`;})()}</div>
                 </div>
                 <div style={{fontSize:13,fontWeight:600,color:"var(--accent)",flexShrink:0}}>
                   {b.date.slice(5).replace("-","/")}{b.time?` ${b.time}`:""}
@@ -1856,7 +2069,7 @@ function LevelsPage({ levels, setLevels, methods, onBack }){
   const [editKey,setEditKey]=useState(null); const [form,setForm]=useState({}); const [planEdit,setPlanEdit]=useState([]); const [editErr,setEditErr]=useState("");
   const [swipedKey,setSwipedKey]=useState(null); const touchStartX=useRef(0);
   const [adding,setAdding]=useState(false); const [newForm,setNewForm]=useState({key:"",label:"",days:14,desc:"",colorKey:"yellow"}); const [newPlans,setNewPlans]=useState([]); const [err,setErr]=useState("");
-  function loadPlans(k){ try{const r=localStorage.getItem(LS_DPLANS);if(r){const d=JSON.parse(r);return d[k]||[];}}catch{}return[]; }
+  function loadPlans(k){ try{const r=localStorage.getItem(LS_DPLANS);if(r){const d=JSON.parse(r);return migratePlans(d[k]||[]);}}catch{}return[]; }
   function savePlans(k,t){ try{const r=localStorage.getItem(LS_DPLANS);const d=r?JSON.parse(r):{};d[k]=t;localStorage.setItem(LS_DPLANS,JSON.stringify(d));}catch{} }
   function startEdit(k){setEditKey(k);setAdding(false);setEditErr("");setForm({label:levels[k].label,days:levels[k].days,desc:levels[k].desc||"",colorKey:levels[k].colorKey||"yellow",color:levelColorHex(levels[k])});setPlanEdit(loadPlans(k));}
   function saveEdit(){
@@ -1918,7 +2131,7 @@ function LevelsPage({ levels, setLevels, methods, onBack }){
               </label>
             </div>
             <div style={{borderTop:"1px solid var(--border)",marginBottom:12,paddingTop:12}}>
-              <TrackingPlanEditor plans={planEdit} setPlans={setPlanEdit} methods={safe} defaultFreq={freqKeyFromDays(form.days)}/>
+              <TrackingPlanEditor plans={planEdit} setPlans={setPlanEdit} methods={safe} defaultTarget={defaultTargetFromDays(form.days)}/>
             </div>
             {editErr&&<div className="inp-err">{editErr}</div>}
             <div style={{display:"flex",gap:6}}>
@@ -1996,7 +2209,7 @@ function LevelsPage({ levels, setLevels, methods, onBack }){
             </label>
           </div>
           <div style={{borderTop:"1px solid var(--border)",marginBottom:12,paddingTop:12}}>
-            <TrackingPlanEditor plans={newPlans} setPlans={setNewPlans} methods={safe} defaultFreq={freqKeyFromDays(newForm.days)}/>
+            <TrackingPlanEditor plans={newPlans} setPlans={setNewPlans} methods={safe} defaultTarget={defaultTargetFromDays(newForm.days)}/>
           </div>
           {err&&<div className="inp-err">{err}</div>}
           <div style={{display:"flex",gap:6}}>
@@ -2207,7 +2420,7 @@ function ExportCenterPage({ cases, levels, methods, onBack, showToast }){
   function dl(content,filename,type){const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=filename;a.click();URL.revokeObjectURL(url);}
   function exportCSV(){
     const header=["暱稱","編號","等級","上次聯絡","備註","追蹤計畫"];
-    const rows=cases.map(c=>[c.nick??"",c.id??"",levels[c.level]?.label||c.level||"",c.lastContact??"",c.note??"",(c.trackingPlans||[]).map(p=>`${p.method}/${FREQ_OPTIONS.find(f=>f.key===p.freq)?.label||p.freq}/${p.timesPerPeriod}次`).join("; ")]);
+    const rows=cases.map(c=>[c.nick??"",c.id??"",levels[c.level]?.label||c.level||"",c.lastContact??"",c.note??"",migratePlans(c.trackingPlans).map(p=>`${p.method}/${planTargetLabel(p)}${planScheduleLabel(p)?"·"+planScheduleLabel(p):""}`).join("; ")]);
     dl("\uFEFF"+[header,...rows].map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n"),"ReCon_export.csv","text/csv;charset=utf-8;");
     showToast("已匯出 CSV");
   }
@@ -2285,7 +2498,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v15.72</span>
+          <span className="s-val">v16.0</span>
         </div>
       </div>
     </div>
@@ -2316,7 +2529,7 @@ function WeekStartPage({ weekStartDow, setWeekStartDow, onBack }){
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function App(){
-  const [cases,   setCases]   = useState(()=>lsGet(LS.cases,   makeInitialCases()));
+  const [cases,   setCases]   = useState(()=>migrateCases(lsGet(LS.cases,   makeInitialCases())));
   const [methods, setMethods] = useState(()=>lsGet(LS.methods, INITIAL_METHODS));
   const [levels,  setLevels]  = useState(()=>lsGet(LS.levels,  INITIAL_LEVELS));
   const [theme,   setThemeRaw]= useState(()=>{ try{return localStorage.getItem(LS.theme)||"light"}catch{return "light"} });
@@ -2332,7 +2545,7 @@ export default function App(){
         // 若尚未有預約(bookings)，重新對齊 nextDue 到新的週期範圍；已手動預約的日期不受影響
         if(Array.isArray(p.bookings) && p.bookings.length>0) return p;
         if(!p.nextDue) return p;
-        return {...p, nextDue: calcPlanNextDue(p, TODAY)};
+        return {...p, nextDue: calcPlanNextDue(p, TODAY, c.logs)};
       })
     })));
   }
