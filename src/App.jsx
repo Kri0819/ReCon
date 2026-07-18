@@ -250,7 +250,7 @@ const TODAY_DISPLAY = `${_mn[_d.getMonth()]}月 ${_dn[_d.getDate()]}日`;
 
 const INITIAL_LEVELS = {
   A:{ label:"A 級", days:7,  desc:"每週",     colorKey:"red"    },
-  B:{ label:"B 級", days:14, desc:"每兩週",   colorKey:"yellow" },
+  B:{ label:"B 級", days:14, desc:"每月 2 次",   colorKey:"yellow" },
   C:{ label:"C 級", days:30, desc:"每月",     colorKey:"green"  },
   E:{ label:"緊急",  days:7,  desc:"每週",     colorKey:"red"    },
 };
@@ -303,7 +303,15 @@ function weeksExistInMonth(y,m){ return 4; } // 固定四個時段
 // 絕對不刪除舊欄位，只新增欄位，確保舊資料不會遺失。
 function migratePlan(plan){
   if(!plan) return plan;
-  if(plan.targetType) return plan; // 已是新格式
+  if(plan.targetType){
+    // 已是新格式：仍需清理可能殘留的舊版第5時段資料（v16.0.1 起固定僅有4個時段）
+    return {
+      ...plan,
+      targetWeeks: Array.isArray(plan.targetWeeks)
+        ? plan.targetWeeks.filter(w=>w>=1&&w<=4)
+        : [],
+    };
+  }
   let targetType="monthly", timesPerPeriod=plan.timesPerPeriod||1, scheduleMode="flexible", targetWeeks=[];
   switch(plan.freq){
     case "weekly":    targetType="weekly";    timesPerPeriod=1; break;
@@ -2491,7 +2499,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v16.0.1</span>
+          <span className="s-val">v16.0.2</span>
         </div>
       </div>
     </div>
@@ -2503,7 +2511,7 @@ function WeekStartPage({ weekStartDow, setWeekStartDow, onBack }){
     <div className="screen-pad">
       <div className="ph"><div><button className="back-btn" onClick={onBack}>‹ 設定</button><div className="ph-title">週期起始日</div></div></div>
       <div style={{padding:"0 22px 12px",fontSize:12,color:"var(--muted)",lineHeight:1.6}}>
-        追蹤計畫「每週／每兩週」的週期範圍從哪天開始算
+        設定每週追蹤週期從星期幾開始。
       </div>
       <div className="settings-group">
         {DOW_NAMES.map((name,i)=>(
