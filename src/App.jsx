@@ -269,43 +269,35 @@ const FREQ_OPTIONS = [
 
 // 使用者可選的追蹤目標（新增/編輯追蹤任務時使用）
 const TARGET_OPTIONS = [
-  {key:"weekly1",    targetType:"weekly",    timesPerPeriod:1, label:"每週 1 次"},
-  {key:"monthly1",   targetType:"monthly",   timesPerPeriod:1, label:"每月 1 次"},
-  {key:"monthly2",   targetType:"monthly",   timesPerPeriod:2, label:"每月 2 次"},
-  {key:"monthly3",   targetType:"monthly",   timesPerPeriod:3, label:"每月 3 次"},
-  {key:"monthly4",   targetType:"monthly",   timesPerPeriod:4, label:"每月 4 次"},
-  {key:"quarterly1", targetType:"quarterly", timesPerPeriod:1, label:"每季 1 次"},
-  {key:"interval",   targetType:"interval",  timesPerPeriod:1, label:"自訂間隔"},
+  {targetType:"weekly",    timesPerPeriod:1, label:"每週 1 次"},
+  {targetType:"monthly",   timesPerPeriod:1, label:"每月 1 次"},
+  {targetType:"monthly",   timesPerPeriod:2, label:"每月 2 次"},
+  {targetType:"monthly",   timesPerPeriod:3, label:"每月 3 次"},
+  {targetType:"monthly",   timesPerPeriod:4, label:"每月 4 次"},
+  {targetType:"quarterly", timesPerPeriod:1, label:"每季 1 次"},
+  {targetType:"interval",  label:"自訂間隔"},
 ];
-function targetOptionKey(p){
-  if(p.targetType==="monthly") return `monthly${p.timesPerPeriod||1}`;
-  if(p.targetType==="quarterly") return "quarterly1";
-  if(p.targetType==="interval") return "interval";
-  return "weekly1";
-}
 
-// 每月多次時，「安排方式」的預設週次組合
+// 每月多次時，「安排方式」的預設時段組合（時段＝每月固定的 4 個區塊，見 weekOfMonthRange）
 const MONTHLY_SCHEDULE_PRESETS = {
-  2: [ {key:"w13",  label:"第 1、3 週",   weeks:[1,3]},
-       {key:"w24",  label:"第 2、4 週",   weeks:[2,4]} ],
-  3: [ {key:"w124", label:"第 1、2、4 週", weeks:[1,2,4]},
-       {key:"w134", label:"第 1、3、4 週", weeks:[1,3,4]} ],
-  4: [ {key:"wall",  label:"每週一次",     weeks:[1,2,3,4]} ],
+  2: [ {label:"第 1、3 時段",   weeks:[1,3]},
+       {label:"第 2、4 時段",   weeks:[2,4]} ],
+  3: [ {label:"第 1、2、4 時段", weeks:[1,2,4]},
+       {label:"第 1、3、4 時段", weeks:[1,3,4]} ],
+  4: [ {label:"每時段一次",     weeks:[1,2,3,4]} ],
 };
 
-// 週次（第幾週）以「每月第 N 個 7 天區塊」定義：1-7 日為第1週、8-14 日為第2週...以此類推，
-// 這是明確、可預測、不受星期幾影響的規則。
-function weekOfMonthRange(y, m, weekNum){ // m: 0-indexed月份；回傳 [startDateStr,endDateStr]，若該週不存在回傳 null
+// 固定四個時段：1-7日、8-14日、15-21日、22日～月底。
+// 第4時段涵蓋月底所有剩餘天數（不論該月28~31天），因此不需要第5時段。
+function weekOfMonthRange(y, m, periodNum){ // m: 0-indexed月份；回傳 [startDateStr,endDateStr]，若時段不存在回傳 null
+  if(periodNum<1 || periodNum>4) return null;
   const totalDays = new Date(y, m+1, 0).getDate();
-  const start = (weekNum-1)*7 + 1;
+  const start = (periodNum-1)*7 + 1;
   if(start>totalDays) return null;
-  const end = Math.min(weekNum*7, totalDays);
+  const end = periodNum===4 ? totalDays : periodNum*7;
   return [ymd(y,m,start), ymd(y,m,end)];
 }
-function weeksExistInMonth(y,m){ // 該月總共有幾個週次區塊（通常4或5）
-  const totalDays = new Date(y, m+1, 0).getDate();
-  return Math.ceil(totalDays/7);
-}
+function weeksExistInMonth(y,m){ return 4; } // 固定四個時段
 
 // 讀取／編輯追蹤計畫時，把任何舊格式（freq: weekly/biweekly/monthly/quarterly）轉換為新結構。
 // 絕對不刪除舊欄位，只新增欄位，確保舊資料不會遺失。
@@ -346,9 +338,9 @@ function planTargetLabel(p){
 function planScheduleLabel(p){
   if(p.targetType!=="monthly" || (p.timesPerPeriod||1)<=1) return "";
   if(p.scheduleMode==="fixedWeeks" && (p.targetWeeks||[]).length>0){
-    return `第 ${[...p.targetWeeks].sort((a,b)=>a-b).join("、")} 週`;
+    return `第 ${[...p.targetWeeks].sort((a,b)=>a-b).join("、")} 時段`;
   }
-  return "不固定";
+  return "本月完成即可";
 }
 // 給舊版元件相容用（例如個案列表小標籤），只需要 weekly/monthly/quarterly 三選一
 function legacyFreqLabel(p){
@@ -855,7 +847,7 @@ function TrackingPlanEditor({ plans, setPlans, methods, defaultTarget }){
     setAdding(v=>!v);
   }
   function pickTarget(opt){
-    setForm(f=>({...f, targetType:opt.targetType, timesPerPeriod:opt.timesPerPeriod,
+    setForm(f=>({...f, targetType:opt.targetType, timesPerPeriod:opt.timesPerPeriod||1,
       scheduleMode:"flexible", targetWeeks:[]}));
     setCustomWeeksOpen(false);
   }
@@ -924,7 +916,8 @@ function TrackingPlanEditor({ plans, setPlans, methods, defaultTarget }){
           <label className="inp-label">追蹤目標</label>
           <div className="opt-row" style={{flexWrap:"wrap"}}>
             {TARGET_OPTIONS.map(opt=>(
-              <div key={opt.key} className={`opt ${form.targetType===opt.targetType&&form.timesPerPeriod===opt.timesPerPeriod?"active":""}`}
+              <div key={`${opt.targetType}-${opt.timesPerPeriod||1}`}
+                className={`opt ${form.targetType===opt.targetType&&form.timesPerPeriod===(opt.timesPerPeriod||1)?"active":""}`}
                 style={{minWidth:78,flex:"0 0 auto"}}
                 onClick={()=>pickTarget(opt)}>
                 {opt.label}
@@ -937,26 +930,26 @@ function TrackingPlanEditor({ plans, setPlans, methods, defaultTarget }){
               <label className="inp-label">安排方式</label>
               <div className="opt-row" style={{flexWrap:"wrap",marginBottom:customWeeksOpen?8:14}}>
                 {presets.map(ps=>(
-                  <div key={ps.key} className={`opt ${isPresetActive(ps.weeks)?"active":""}`}
+                  <div key={ps.label} className={`opt ${isPresetActive(ps.weeks)?"active":""}`}
                     style={{minWidth:90,flex:"0 0 auto"}}
                     onClick={()=>pickPreset(ps.weeks)}>
                     {ps.label}
                   </div>
                 ))}
                 <div className={`opt ${customWeeksOpen?"active":""}`} style={{minWidth:78,flex:"0 0 auto"}}
-                  onClick={openCustomWeeks}>自訂週次</div>
+                  onClick={openCustomWeeks}>自訂時段</div>
                 <div className={`opt ${form.scheduleMode==="flexible"?"active":""}`} style={{minWidth:78,flex:"0 0 auto"}}
-                  onClick={pickFlexible}>不固定，只計算本月完成次數</div>
+                  onClick={pickFlexible}>本月完成即可</div>
               </div>
               {customWeeksOpen&&(
                 <div style={{marginBottom:14}}>
-                  <div className="inp-hint" style={{marginTop:-4,marginBottom:8}}>選擇本月第幾週需要完成（可複選）</div>
+                  <div className="inp-hint" style={{marginTop:-4,marginBottom:8}}>選擇本月哪些時段需要完成（可複選）</div>
                   <div className="opt-row">
-                    {[1,2,3,4,5].map(w=>(
+                    {[1,2,3,4].map(w=>(
                       <div key={w} className={`opt ${(form.targetWeeks||[]).includes(w)?"active":""}`}
-                        style={{minWidth:44,flex:"0 0 auto"}}
+                        style={{minWidth:66,flex:"0 0 auto"}}
                         onClick={()=>toggleCustomWeek(w)}>
-                        第{w}週
+                        第{w}時段
                       </div>
                     ))}
                   </div>
@@ -2498,7 +2491,7 @@ function SettingsScreen({ cases, methods, setMethods, levels, setLevels, updateC
             <img src={LOGO_LIGHT} width="44" height="44" style={{objectFit:"contain"}}/>
             <span className="s-label">ReCon｜再聯絡</span>
           </div>
-          <span className="s-val">v16.0</span>
+          <span className="s-val">v16.0.1</span>
         </div>
       </div>
     </div>
